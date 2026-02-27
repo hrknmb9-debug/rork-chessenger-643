@@ -12,13 +12,17 @@ export default function MessagesLayout() {
         headerTintColor: colors.textPrimary,
         headerTitleStyle: { fontWeight: '700' as const },
         contentStyle: { backgroundColor: colors.background },
+        headerShadowVisible: false,
+        animation: 'slide_from_right',
       }}
     >
       <Stack.Screen
         name="index"
-        options={{
-          title: 'メッセージ',
-        }}
+        options={{ title: 'メッセージ' }}
+      />
+      <Stack.Screen
+        name="[id]"
+        options={{ headerShown: true }}
       />
     </Stack>
   );

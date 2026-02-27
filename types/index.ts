@@ -117,6 +117,8 @@ export interface Message {
   textEn?: string;
   timestamp: string;
   read: boolean;
+  imageUrl?: string;
+  reactions?: string[];
 }
 
 export interface Conversation {

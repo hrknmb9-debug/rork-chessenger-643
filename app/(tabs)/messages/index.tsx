@@ -7,28 +7,21 @@ import {
   Pressable,
   TextInput,
   Platform,
-  Animated,
-  PanResponder,
   Alert,
-  GestureResponderEvent,
-  PanResponderGestureState,
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Search, MessageCircle, Trash2, BellOff, Archive } from 'lucide-react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { Search, MessageCircle, Trash2, CheckCheck, ShieldOff } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { useAuth } from '@/providers/AuthProvider';
-import { Conversation, Message, Player } from '@/types';
+import { Conversation, Message } from '@/types';
 import { supabase } from '@/utils/supabaseClient';
 import { t, getTimeAgo } from '@/utils/translations';
-
-const SWIPE_THRESHOLD = 8;
-const ACTION_WIDTH = 180;
-const VELOCITY_THRESHOLD = 0.1;
 
 interface SupabaseMessage {
   id: string;
@@ -39,198 +32,128 @@ interface SupabaseMessage {
   created_at: string;
 }
 
+// ─── Swipeable Row ────────────────────────────────────────────────────────────
+
 function SwipeableConversation({
   item,
   onPress,
+  onRead,
   onDelete,
-  onMute,
-  onArchive,
+  onBlock,
   language,
   colors,
   styles,
 }: {
   item: Conversation;
   onPress: () => void;
+  onRead: () => void;
   onDelete: () => void;
-  onMute: () => void;
-  onArchive: () => void;
+  onBlock: () => void;
   language: string;
   colors: ThemeColors;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isSwipedOpen = useRef(false);
-  const startOffset = useRef(0);
-  const hasMoved = useRef(false);
+  const swipeRef = useRef<Swipeable>(null);
+  const { currentUserId } = useChess();
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-        const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.2;
-        return Math.abs(gestureState.dx) > 2 && isHorizontal;
-      },
-      onMoveShouldSetPanResponderCapture: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-        const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
-        return Math.abs(gestureState.dx) > 3 && isHorizontal;
-      },
-      onPanResponderGrant: () => {
-        translateX.stopAnimation((value) => {
-          startOffset.current = value;
-        });
-        hasMoved.current = false;
-      },
-      onPanResponderMove: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-        hasMoved.current = true;
-        const newValue = Math.min(0, Math.max(-ACTION_WIDTH, startOffset.current + gestureState.dx));
-        translateX.setValue(newValue);
-      },
-      onPanResponderRelease: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-        if (!hasMoved.current) return;
+  const close = useCallback(() => swipeRef.current?.close(), []);
 
-        const shouldOpen = !isSwipedOpen.current && (gestureState.dx < -SWIPE_THRESHOLD || gestureState.vx < -VELOCITY_THRESHOLD);
-        const shouldClose = isSwipedOpen.current && (gestureState.dx > SWIPE_THRESHOLD || gestureState.vx > VELOCITY_THRESHOLD);
+  const handleRead = useCallback(() => { close(); onRead(); }, [close, onRead]);
+  const handleDelete = useCallback(() => { close(); onDelete(); }, [close, onDelete]);
+  const handleBlock = useCallback(() => { close(); onBlock(); }, [close, onBlock]);
 
-        if (shouldOpen) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          Animated.spring(translateX, {
-            toValue: -ACTION_WIDTH,
-            useNativeDriver: true,
-            tension: 120,
-            friction: 14,
-          }).start();
-          isSwipedOpen.current = true;
-        } else if (shouldClose) {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 120,
-            friction: 14,
-          }).start();
-          isSwipedOpen.current = false;
-        } else {
-          const target = isSwipedOpen.current ? -ACTION_WIDTH : 0;
-          Animated.spring(translateX, {
-            toValue: target,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 14,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        const target = isSwipedOpen.current ? -ACTION_WIDTH : 0;
-        Animated.spring(translateX, {
-          toValue: target,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 14,
-        }).start();
-      },
-    })
-  ).current;
-
-  const closeSwipe = useCallback(() => {
-    Animated.spring(translateX, {
-      toValue: 0,
-      useNativeDriver: true,
-      speed: 20,
-      bounciness: 4,
-    }).start();
-    isSwipedOpen.current = false;
-  }, [translateX]);
-
-  const handleDelete = useCallback(() => {
-    closeSwipe();
-    onDelete();
-  }, [closeSwipe, onDelete]);
-
-  const handleMute = useCallback(() => {
-    closeSwipe();
-    onMute();
-  }, [closeSwipe, onMute]);
-
-  const handleArchive = useCallback(() => {
-    closeSwipe();
-    onArchive();
-  }, [closeSwipe, onArchive]);
-
-  const handleItemPress = useCallback(() => {
-    if (isSwipedOpen.current) {
-      closeSwipe();
-    } else {
-      onPress();
-    }
-  }, [closeSwipe, onPress]);
+  const renderRightActions = useCallback(() => (
+    <View style={styles.rightActions}>
+      <Pressable
+        style={[styles.actionBtn, { backgroundColor: colors.blue }]}
+        onPress={handleRead}
+      >
+        <CheckCheck size={18} color={colors.white} />
+        <Text style={styles.actionLabel}>既読</Text>
+      </Pressable>
+      <Pressable
+        style={[styles.actionBtn, { backgroundColor: colors.red }]}
+        onPress={handleDelete}
+      >
+        <Trash2 size={18} color={colors.white} />
+        <Text style={styles.actionLabel}>削除</Text>
+      </Pressable>
+      <Pressable
+        style={[styles.actionBtn, { backgroundColor: colors.orange }]}
+        onPress={handleBlock}
+      >
+        <ShieldOff size={18} color={colors.white} />
+        <Text style={styles.actionLabel}>ブロック</Text>
+      </Pressable>
+    </View>
+  ), [colors, handleRead, handleDelete, handleBlock, styles]);
 
   const isUnread = item.unreadCount > 0;
   const timeAgo = getTimeAgo(item.lastMessage.timestamp, language);
-  const { currentUserId } = useChess();
-  const isFromMe = item.lastMessage.senderId === currentUserId || item.lastMessage.senderId === 'me';
+  const isFromMe =
+    item.lastMessage.senderId === currentUserId ||
+    item.lastMessage.senderId === 'me';
 
   return (
-    <View style={styles.swipeableContainer}>
-      <View style={styles.actionsContainer}>
-        <Pressable onPress={handleArchive} style={styles.actionArchive} testID={`archive-${item.id}`}>
-          <Archive size={18} color={colors.white} />
-          <Text style={styles.actionLabel}>{t('archive_conversation', language)}</Text>
-        </Pressable>
-        <Pressable onPress={handleMute} style={styles.actionMute} testID={`mute-${item.id}`}>
-          <BellOff size={18} color={colors.white} />
-          <Text style={styles.actionLabel}>{t('mute_conversation', language)}</Text>
-        </Pressable>
-        <Pressable onPress={handleDelete} style={styles.actionDelete} testID={`delete-${item.id}`}>
-          <Trash2 size={18} color={colors.white} />
-          <Text style={styles.actionLabel}>{t('delete_conversation', language)}</Text>
-        </Pressable>
-      </View>
-
-      <Animated.View
-        style={[styles.swipeableForeground, { transform: [{ translateX }] }]}
-        {...panResponder.panHandlers}
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderRightActions}
+      rightThreshold={40}
+      overshootRight={false}
+      friction={2}
+    >
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.conversationItem,
+          pressed && styles.conversationPressed,
+          isUnread && styles.conversationUnread,
+        ]}
       >
-        <Pressable
-          onPress={handleItemPress}
-          style={({ pressed }) => [
-            styles.conversationItem,
-            pressed && !isSwipedOpen.current && styles.conversationPressed,
-            isUnread && styles.conversationUnread,
-          ]}
-          testID={`conversation-${item.id}`}
-        >
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: item.player.avatar }} style={styles.avatar} contentFit="cover" />
-            {item.player.isOnline && <View style={styles.onlineDot} />}
+        {/* Avatar */}
+        <View style={styles.avatarWrapper}>
+          <Image
+            source={{ uri: item.player.avatar }}
+            style={styles.avatar}
+            contentFit="cover"
+          />
+          {item.player.isOnline && <View style={styles.onlineDot} />}
+        </View>
+
+        {/* Content */}
+        <View style={styles.conversationBody}>
+          <View style={styles.conversationHeader}>
+            <Text
+              style={[styles.playerName, isUnread && styles.playerNameUnread]}
+              numberOfLines={1}
+            >
+              {item.player.name}
+            </Text>
+            <Text style={[styles.timestamp, isUnread && styles.timestampUnread]}>
+              {timeAgo}
+            </Text>
           </View>
 
-          <View style={styles.conversationContent}>
-            <View style={styles.conversationHeader}>
-              <Text style={[styles.playerName, isUnread && styles.playerNameUnread]} numberOfLines={1}>
-                {item.player.name}
-              </Text>
-              <Text style={[styles.timestamp, isUnread && styles.timestampUnread]}>
-                {timeAgo}
-              </Text>
-            </View>
-            <View style={styles.messagePreview}>
-              <Text
-                style={[styles.lastMessage, isUnread && styles.lastMessageUnread]}
-                numberOfLines={1}
-              >
-                {isFromMe ? t('from_me', language) : ''}{item.lastMessage.text}
-              </Text>
-              {isUnread && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadCount}>{item.unreadCount}</Text>
-                </View>
-              )}
-            </View>
+          <View style={styles.previewRow}>
+            <Text
+              style={[styles.previewText, isUnread && styles.previewTextUnread]}
+              numberOfLines={1}
+            >
+              {isFromMe ? '自分: ' : ''}{item.lastMessage.text}
+            </Text>
+            {isUnread && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{item.unreadCount}</Text>
+              </View>
+            )}
           </View>
-        </Pressable>
-      </Animated.View>
-    </View>
+        </View>
+      </Pressable>
+    </Swipeable>
   );
 }
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 function getRoomId(userId1: string, userId2: string): string {
   return [userId1, userId2].sort().join('_');
@@ -239,12 +162,14 @@ function getRoomId(userId1: string, userId2: string): string {
 export default function MessagesScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { language, currentUserId, fetchPlayerProfile, blockedUsers } = useChess();
+  const { language, currentUserId, fetchPlayerProfile, blockedUsers, blockUser } = useChess();
   const { isLoggedIn } = useAuth();
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+
+  // ── Load conversations ────────────────────────────────────────────────────
 
   const loadConversations = useCallback(async () => {
     if (!currentUserId || currentUserId === 'me') {
@@ -253,22 +178,13 @@ export default function MessagesScreen() {
     }
 
     try {
-      console.log('Messages: Loading conversations from Supabase for', currentUserId);
-
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select('*')
         .or(`sender_id.eq.${currentUserId},room_id.ilike.%${currentUserId}%`)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.log('Messages: Error loading messages', error.message);
-        setLoading(false);
-        return;
-      }
-
-      if (!messagesData || messagesData.length === 0) {
-        console.log('Messages: No messages found');
+      if (error || !messagesData || messagesData.length === 0) {
         setConversations([]);
         setLoading(false);
         return;
@@ -287,14 +203,13 @@ export default function MessagesScreen() {
         const parts = roomId.split('_');
         const otherUserId = parts.find(p => p !== currentUserId);
         if (!otherUserId) continue;
-
         if (blockedUsers.includes(otherUserId)) continue;
 
         const player = await fetchPlayerProfile(otherUserId);
         if (!player) continue;
 
-        const sorted = msgs.sort((a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        const sorted = [...msgs].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
 
         const messages: Message[] = sorted.map(m => ({
@@ -306,8 +221,8 @@ export default function MessagesScreen() {
         }));
 
         const lastMsg = sorted[sorted.length - 1];
-        const unreadCount = sorted.filter(m =>
-          m.sender_id !== currentUserId && !m.is_read
+        const unreadCount = sorted.filter(
+          m => m.sender_id !== currentUserId && !m.is_read
         ).length;
 
         convs.push({
@@ -325,12 +240,13 @@ export default function MessagesScreen() {
         });
       }
 
-      convs.sort((a, b) =>
-        new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime()
+      convs.sort(
+        (a, b) =>
+          new Date(b.lastMessage.timestamp).getTime() -
+          new Date(a.lastMessage.timestamp).getTime()
       );
 
       setConversations(convs);
-      console.log('Messages: Loaded', convs.length, 'conversations');
     } catch (e) {
       console.log('Messages: Failed to load conversations', e);
     } finally {
@@ -346,6 +262,8 @@ export default function MessagesScreen() {
     }
   }, [isLoggedIn, currentUserId, loadConversations]);
 
+  // ── Realtime ──────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!currentUserId || currentUserId === 'me') return;
 
@@ -358,51 +276,81 @@ export default function MessagesScreen() {
       }, (payload) => {
         const msg = payload.new as SupabaseMessage;
         if (msg.sender_id === currentUserId || msg.room_id.includes(currentUserId)) {
-          console.log('Messages: Realtime new message in room', msg.room_id);
           loadConversations();
         }
       })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [currentUserId, loadConversations]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   const markConversationRead = useCallback(async (roomId: string) => {
     setConversations(prev =>
-      prev.map(c => {
-        if (c.id !== roomId) return c;
-        return {
-          ...c,
-          unreadCount: 0,
-          lastMessage: { ...c.lastMessage, read: true },
-          messages: c.messages.map(m => ({ ...m, read: true })),
-        };
+      prev.map(c => c.id !== roomId ? c : {
+        ...c,
+        unreadCount: 0,
+        lastMessage: { ...c.lastMessage, read: true },
+        messages: c.messages.map(m => ({ ...m, read: true })),
       })
     );
-
-    try {
-      if (currentUserId && currentUserId !== 'me') {
-        await supabase
-          .from('messages')
-          .update({ is_read: true })
-          .eq('room_id', roomId)
-          .neq('sender_id', currentUserId)
-          .eq('is_read', false);
-        console.log('Messages: Marked as read in Supabase for room', roomId);
-      }
-    } catch (e) {
-      console.log('Messages: Failed to mark as read in Supabase', e);
+    if (currentUserId && currentUserId !== 'me') {
+      await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('room_id', roomId)
+        .neq('sender_id', currentUserId)
+        .eq('is_read', false);
     }
   }, [currentUserId]);
+
+  const handleConversationPress = useCallback((conv: Conversation) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    markConversationRead(conv.id);
+    router.push(`/messages/${conv.id}` as any);
+  }, [router, markConversationRead]);
+
+  const handleRead = useCallback((roomId: string) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    markConversationRead(roomId);
+  }, [markConversationRead]);
+
+  const handleDelete = useCallback((convId: string) => {
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert('削除', 'この会話を削除しますか？', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除',
+        style: 'destructive',
+        onPress: () => setConversations(prev => prev.filter(c => c.id !== convId)),
+      },
+    ]);
+  }, []);
+
+  const handleBlock = useCallback((conv: Conversation) => {
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      'ブロック',
+      `${conv.player.name} をブロックしますか？`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: 'ブロック',
+          style: 'destructive',
+          onPress: async () => {
+            await blockUser(conv.player.id);
+            setConversations(prev => prev.filter(c => c.id !== conv.id));
+          },
+        },
+      ]
+    );
+  }, [blockUser]);
 
   const filteredConversations = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
     const q = searchQuery.toLowerCase();
-    return conversations.filter(c =>
-      c.player.name.toLowerCase().includes(q)
-    );
+    return conversations.filter(c => c.player.name.toLowerCase().includes(q));
   }, [conversations, searchQuery]);
 
   const totalUnread = useMemo(
@@ -410,86 +358,31 @@ export default function MessagesScreen() {
     [conversations]
   );
 
-  const handleConversationPress = useCallback((conv: Conversation) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    markConversationRead(conv.id);
-    router.push(`/chat/${conv.id}` as any);
-  }, [router, markConversationRead]);
+  const renderConversation = useCallback(({ item }: { item: Conversation }) => (
+    <SwipeableConversation
+      item={item}
+      onPress={() => handleConversationPress(item)}
+      onRead={() => handleRead(item.id)}
+      onDelete={() => handleDelete(item.id)}
+      onBlock={() => handleBlock(item)}
+      language={language}
+      colors={colors}
+      styles={styles}
+    />
+  ), [handleConversationPress, handleRead, handleDelete, handleBlock, language, colors, styles]);
 
-  const handleDelete = useCallback((convId: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    }
-    Alert.alert(
-      t('delete_conversation', language),
-      '',
-      [
-        { text: t('cancel', language), style: 'cancel' },
-        {
-          text: t('delete_conversation', language),
-          style: 'destructive',
-          onPress: () => {
-            setConversations(prev => prev.filter(c => c.id !== convId));
-            console.log('Conversation deleted:', convId);
-          },
-        },
-      ]
-    );
-  }, [language]);
-
-  const handleMute = useCallback((convId: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    Alert.alert(t('conversation_muted', language));
-    console.log('Conversation muted:', convId);
-  }, [language]);
-
-  const handleArchive = useCallback((convId: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    setConversations(prev => prev.filter(c => c.id !== convId));
-    Alert.alert(t('conversation_archived', language));
-    console.log('Conversation archived:', convId);
-  }, [language]);
-
-  const handleLoginPress = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push('/login' as any);
-  }, [router]);
-
-  const renderConversation = useCallback(({ item }: { item: Conversation }) => {
-    return (
-      <SwipeableConversation
-        item={item}
-        onPress={() => handleConversationPress(item)}
-        onDelete={() => handleDelete(item.id)}
-        onMute={() => handleMute(item.id)}
-        onArchive={() => handleArchive(item.id)}
-        language={language}
-        colors={colors}
-        styles={styles}
-      />
-    );
-  }, [handleConversationPress, handleDelete, handleMute, handleArchive, language, colors, styles]);
+  // ── Not logged in ─────────────────────────────────────────────────────────
 
   if (!isLoggedIn) {
     return (
-      <View style={styles.container} testID="messages-screen">
+      <View style={styles.container}>
         <View style={styles.loginPrompt}>
           <View style={styles.loginIconContainer}>
-            <MessageCircle size={48} color={colors.gold} />
+            <MessageCircle size={52} color={colors.gold} />
           </View>
           <Text style={styles.loginTitle}>{t('messages', language)}</Text>
-          <Text style={styles.loginSubtitle}>
-            {t('login_prompt_desc', language)}
-          </Text>
-          <Pressable onPress={handleLoginPress} style={styles.loginButton}>
+          <Text style={styles.loginSubtitle}>{t('login_prompt_desc', language)}</Text>
+          <Pressable onPress={() => router.push('/login' as any)} style={styles.loginButton}>
             <Text style={styles.loginButtonText}>{t('login', language)}</Text>
           </Pressable>
         </View>
@@ -497,29 +390,29 @@ export default function MessagesScreen() {
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <View style={styles.container} testID="messages-screen">
-      <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <Search size={16} color={colors.textMuted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={t('search_conversations', language)}
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            testID="message-search"
-          />
-        </View>
+    <View style={styles.container}>
+      {/* Search bar */}
+      <View style={styles.searchBar}>
+        <Search size={16} color={colors.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="会話を検索..."
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
         {totalUnread > 0 && (
-          <View style={styles.totalUnreadBadge}>
-            <Text style={styles.totalUnreadText}>{totalUnread}{t('unread_count', language)}</Text>
+          <View style={styles.totalBadge}>
+            <Text style={styles.totalBadgeText}>{totalUnread}</Text>
           </View>
         )}
       </View>
 
       {loading ? (
-        <View style={styles.emptyState}>
+        <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.gold} />
         </View>
       ) : (
@@ -530,8 +423,8 @@ export default function MessagesScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <MessageCircle size={48} color={colors.textMuted} />
+            <View style={styles.center}>
+              <MessageCircle size={52} color={colors.textMuted} />
               <Text style={styles.emptyTitle}>{t('no_messages', language)}</Text>
               <Text style={styles.emptySubtitle}>{t('start_chatting', language)}</Text>
             </View>
@@ -542,128 +435,107 @@ export default function MessagesScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
-    header: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 12,
-      gap: 10,
-    },
-    searchContainer: {
+    // Search
+    searchBar: {
       flexDirection: 'row',
       alignItems: 'center',
+      marginHorizontal: 16,
+      marginTop: 12,
+      marginBottom: 8,
       backgroundColor: colors.surface,
-      borderRadius: 12,
+      borderRadius: 14,
       paddingHorizontal: 14,
-      height: 42,
+      height: 44,
       gap: 10,
     },
     searchInput: {
       flex: 1,
       fontSize: 15,
       color: colors.textPrimary,
-      height: '100%',
     },
-    totalUnreadBadge: {
-      alignSelf: 'flex-start',
-      backgroundColor: colors.goldMuted,
-      paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: 10,
+    totalBadge: {
+      backgroundColor: colors.gold,
+      minWidth: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 6,
     },
-    totalUnreadText: {
+    totalBadgeText: {
       fontSize: 12,
-      fontWeight: '600' as const,
-      color: colors.gold,
+      fontWeight: '700' as const,
+      color: colors.white,
     },
+    // List
     listContent: {
-      paddingBottom: 20,
+      paddingBottom: 24,
     },
-    swipeableContainer: {
-      overflow: 'hidden',
-    },
-    actionsContainer: {
-      position: 'absolute',
-      right: 0,
-      top: 0,
-      bottom: 0,
-      width: ACTION_WIDTH,
+    // Swipeable actions
+    rightActions: {
       flexDirection: 'row',
+      width: 192,
     },
-    actionArchive: {
+    actionBtn: {
       flex: 1,
-      backgroundColor: colors.blue,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 3,
-    },
-    actionMute: {
-      flex: 1,
-      backgroundColor: colors.orange,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
-    },
-    actionDelete: {
-      flex: 1,
-      backgroundColor: colors.red,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
+      gap: 4,
     },
     actionLabel: {
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: '600' as const,
-      color: colors.white,
-      textAlign: 'center',
+      color: '#ffffff',
+      textAlign: 'center' as const,
     },
-    swipeableForeground: {
-      backgroundColor: colors.background,
-    },
+    // Conversation row
     conversationItem: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 16,
       paddingVertical: 14,
-      gap: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.divider,
+      gap: 13,
       backgroundColor: colors.background,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
     },
     conversationPressed: {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surfaceLight,
     },
     conversationUnread: {
       backgroundColor: colors.goldMuted,
     },
-    avatarContainer: {
+    avatarWrapper: {
       position: 'relative',
     },
     avatar: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      width: 54,
+      height: 54,
+      borderRadius: 27,
       backgroundColor: colors.surfaceLight,
     },
     onlineDot: {
       position: 'absolute',
-      bottom: 1,
-      right: 1,
-      width: 14,
-      height: 14,
+      bottom: 2,
+      right: 2,
+      width: 13,
+      height: 13,
       borderRadius: 7,
       backgroundColor: colors.green,
-      borderWidth: 2.5,
+      borderWidth: 2,
       borderColor: colors.background,
     },
-    conversationContent: {
+    conversationBody: {
       flex: 1,
-      gap: 4,
+      gap: 5,
     },
     conversationHeader: {
       flexDirection: 'row',
@@ -688,21 +560,22 @@ function createStyles(colors: ThemeColors) {
       color: colors.gold,
       fontWeight: '600' as const,
     },
-    messagePreview: {
+    previewRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
     },
-    lastMessage: {
+    previewText: {
       flex: 1,
       fontSize: 14,
       color: colors.textMuted,
+      lineHeight: 19,
     },
-    lastMessageUnread: {
+    previewTextUnread: {
       color: colors.textSecondary,
       fontWeight: '500' as const,
     },
-    unreadBadge: {
+    badge: {
       backgroundColor: colors.gold,
       minWidth: 20,
       height: 20,
@@ -711,55 +584,19 @@ function createStyles(colors: ThemeColors) {
       justifyContent: 'center',
       paddingHorizontal: 6,
     },
-    unreadCount: {
+    badgeText: {
       fontSize: 11,
       fontWeight: '700' as const,
       color: colors.white,
     },
-    loginPrompt: {
+    // Empty / loading
+    center: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 40,
-    },
-    loginIconContainer: {
-      width: 96,
-      height: 96,
-      borderRadius: 48,
-      backgroundColor: colors.goldMuted,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 20,
-    },
-    loginTitle: {
-      fontSize: 22,
-      fontWeight: '700' as const,
-      color: colors.textPrimary,
-      marginBottom: 8,
-    },
-    loginSubtitle: {
-      fontSize: 15,
-      color: colors.textMuted,
-      textAlign: 'center',
-      marginBottom: 28,
-      lineHeight: 22,
-    },
-    loginButton: {
-      backgroundColor: colors.gold,
-      paddingHorizontal: 36,
-      paddingVertical: 14,
-      borderRadius: 14,
-    },
-    loginButtonText: {
-      fontSize: 16,
-      fontWeight: '700' as const,
-      color: colors.white,
-    },
-    emptyState: {
-      alignItems: 'center',
       paddingTop: 80,
       paddingHorizontal: 40,
-      gap: 12,
+      gap: 14,
     },
     emptyTitle: {
       fontSize: 18,
@@ -769,7 +606,47 @@ function createStyles(colors: ThemeColors) {
     emptySubtitle: {
       fontSize: 14,
       color: colors.textMuted,
-      textAlign: 'center',
+      textAlign: 'center' as const,
+    },
+    // Login prompt
+    loginPrompt: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 40,
+    },
+    loginIconContainer: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.goldMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 24,
+    },
+    loginTitle: {
+      fontSize: 24,
+      fontWeight: '700' as const,
+      color: colors.textPrimary,
+      marginBottom: 10,
+    },
+    loginSubtitle: {
+      fontSize: 15,
+      color: colors.textMuted,
+      textAlign: 'center' as const,
+      marginBottom: 32,
+      lineHeight: 23,
+    },
+    loginButton: {
+      backgroundColor: colors.gold,
+      paddingHorizontal: 40,
+      paddingVertical: 15,
+      borderRadius: 16,
+    },
+    loginButtonText: {
+      fontSize: 16,
+      fontWeight: '700' as const,
+      color: colors.white,
     },
   });
 }

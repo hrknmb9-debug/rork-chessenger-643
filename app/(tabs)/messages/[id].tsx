@@ -1,0 +1,788 @@
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  useEffect,
+} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Modal,
+  Alert,
+  TouchableOpacity,
+} from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import {
+  Send,
+  ImagePlus,
+  Check,
+  CheckCheck,
+} from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import { ThemeColors } from '@/constants/colors';
+import { useTheme } from '@/providers/ThemeProvider';
+import { useChess } from '@/providers/ChessProvider';
+import { Message, Player } from '@/types';
+import { supabase } from '@/utils/supabaseClient';
+import { t, getTimeAgo } from '@/utils/translations';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const EMOJI_LIST = ['❤️', '👍', '😂', '😮', '😢', '🎉', '🔥', '👏'];
+
+interface SupabaseMessage {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+// image content encoding helpers
+function encodeImageContent(uri: string): string {
+  return `__IMG__${uri}`;
+}
+function decodeContent(content: string): { isImage: boolean; value: string } {
+  if (content.startsWith('__IMG__')) {
+    return { isImage: true, value: content.slice(7) };
+  }
+  return { isImage: false, value: content };
+}
+
+// ── Emoji Reaction Picker ─────────────────────────────────────────────────────
+
+function EmojiPicker({
+  visible,
+  onSelect,
+  onClose,
+  colors,
+}: {
+  visible: boolean;
+  onSelect: (emoji: string) => void;
+  onClose: () => void;
+  colors: ThemeColors;
+}) {
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        style={[pickerStyles.backdrop]}
+        onPress={onClose}
+      >
+        <View style={[pickerStyles.container, { backgroundColor: colors.surface }]}>
+          <View style={pickerStyles.emojiRow}>
+            {EMOJI_LIST.map(emoji => (
+              <TouchableOpacity
+                key={emoji}
+                style={pickerStyles.emojiBtn}
+                onPress={() => { onSelect(emoji); onClose(); }}
+              >
+                <Text style={pickerStyles.emoji}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const pickerStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  emojiRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  emojiBtn: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+  },
+  emoji: {
+    fontSize: 28,
+  },
+});
+
+// ── Message Bubble ─────────────────────────────────────────────────────────────
+
+function MessageBubble({
+  item,
+  isMe,
+  chatPlayer,
+  language,
+  colors,
+  styles,
+  onLongPress,
+  reactions,
+}: {
+  item: Message;
+  isMe: boolean;
+  chatPlayer: Player | null;
+  language: string;
+  colors: ThemeColors;
+  styles: ReturnType<typeof createStyles>;
+  onLongPress: () => void;
+  reactions: string[];
+}) {
+  const { isImage, value } = decodeContent(item.text);
+  const timeStr = getTimeAgo(item.timestamp, language);
+
+  // Group reactions
+  const reactionGroups = useMemo(() => {
+    const map: Record<string, number> = {};
+    reactions.forEach(e => { map[e] = (map[e] ?? 0) + 1; });
+    return Object.entries(map);
+  }, [reactions]);
+
+  return (
+    <View
+      style={[
+        styles.bubbleRow,
+        isMe ? styles.bubbleRowMe : styles.bubbleRowOther,
+      ]}
+    >
+      {/* Other user avatar */}
+      {!isMe && chatPlayer && (
+        <Image
+          source={{ uri: chatPlayer.avatar }}
+          style={styles.bubbleAvatar}
+          contentFit="cover"
+        />
+      )}
+
+      <View style={[styles.bubbleCol, isMe && styles.bubbleColMe]}>
+        <Pressable
+          onLongPress={() => {
+            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onLongPress();
+          }}
+          style={[
+            styles.bubble,
+            isMe ? styles.bubbleMe : styles.bubbleOther,
+          ]}
+        >
+          {isImage ? (
+            <Image
+              source={{ uri: value }}
+              style={styles.imageMessage}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
+              {item.text}
+            </Text>
+          )}
+        </Pressable>
+
+        {/* Time + read receipt */}
+        <View style={[styles.metaRow, isMe && styles.metaRowMe]}>
+          <Text style={styles.metaTime}>{timeStr}</Text>
+          {isMe && (
+            item.read
+              ? <CheckCheck size={13} color={colors.gold} />
+              : <Check size={13} color={colors.textMuted} />
+          )}
+        </View>
+
+        {/* Reaction badges */}
+        {reactionGroups.length > 0 && (
+          <View style={[styles.reactionRow, isMe && styles.reactionRowMe]}>
+            {reactionGroups.map(([emoji, count]) => (
+              <View key={emoji} style={[styles.reactionBadge, { backgroundColor: colors.surface }]}>
+                <Text style={styles.reactionEmoji}>{emoji}</Text>
+                {count > 1 && <Text style={[styles.reactionCount, { color: colors.textMuted }]}>{count}</Text>}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ── Main Screen ────────────────────────────────────────────────────────────────
+
+export default function ChatScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { language, currentUserId, fetchPlayerProfile } = useChess();
+  const router = useRouter();
+  const flatListRef = useRef<FlatList>(null);
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [chatPlayer, setChatPlayer] = useState<Player | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Emoji reaction state: messageId → emoji[]
+  const [messageReactions, setMessageReactions] = useState<Record<string, string[]>>({});
+  const [pickerTarget, setPickerTarget] = useState<string | null>(null);
+
+  const roomId = id ?? '';
+  const isNewConversation = roomId.startsWith('new_');
+  const playerIdFromNew = isNewConversation ? roomId.replace('new_', '') : null;
+
+  // ── Load messages ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const loadChat = async () => {
+      if (!roomId || !currentUserId) { setLoading(false); return; }
+
+      try {
+        if (isNewConversation && playerIdFromNew) {
+          const player = await fetchPlayerProfile(playerIdFromNew);
+          setChatPlayer(player);
+          setMessages([]);
+          setLoading(false);
+          return;
+        }
+
+        const parts = roomId.split('_');
+        const otherUserId = parts.find(p => p !== currentUserId);
+        if (otherUserId) {
+          const player = await fetchPlayerProfile(otherUserId);
+          setChatPlayer(player);
+        }
+
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('room_id', roomId)
+          .order('created_at', { ascending: true });
+
+        if (data && !error) {
+          setMessages(data.map((m: SupabaseMessage) => ({
+            id: m.id,
+            senderId: m.sender_id,
+            text: m.content,
+            timestamp: m.created_at,
+            read: m.is_read,
+          })));
+
+          await supabase
+            .from('messages')
+            .update({ is_read: true })
+            .eq('room_id', roomId)
+            .neq('sender_id', currentUserId)
+            .eq('is_read', false);
+        }
+      } catch (e) {
+        console.log('Chat: Failed to load', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadChat();
+  }, [roomId, currentUserId, isNewConversation, playerIdFromNew, fetchPlayerProfile]);
+
+  // ── Realtime ───────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!roomId || isNewConversation) return;
+
+    const channel = supabase
+      .channel(`chat-${roomId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${roomId}`,
+      }, async (payload) => {
+        const msg = payload.new as SupabaseMessage;
+        const newMsg: Message = {
+          id: msg.id,
+          senderId: msg.sender_id,
+          text: msg.content,
+          timestamp: msg.created_at,
+          read: msg.is_read,
+        };
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+        if (msg.sender_id !== currentUserId) {
+          await supabase.from('messages').update({ is_read: true }).eq('id', msg.id);
+        }
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [roomId, currentUserId, isNewConversation]);
+
+  // ── Send helpers ───────────────────────────────────────────────────────────
+
+  const getActualRoomId = useCallback((): string => {
+    if (!isNewConversation) return roomId;
+    if (playerIdFromNew && currentUserId) {
+      return [currentUserId, playerIdFromNew].sort().join('_');
+    }
+    return roomId;
+  }, [roomId, isNewConversation, playerIdFromNew, currentUserId]);
+
+  const sendContent = useCallback(async (content: string) => {
+    if (!currentUserId) return;
+    const actualRoomId = getActualRoomId();
+
+    const tempId = `msg_temp_${Date.now()}`;
+    const tempMsg: Message = {
+      id: tempId,
+      senderId: currentUserId,
+      text: content,
+      timestamp: new Date().toISOString(),
+      read: true,
+    };
+    setMessages(prev => [...prev, tempMsg]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({ room_id: actualRoomId, sender_id: currentUserId, content, is_read: false })
+        .select()
+        .single();
+
+      if (data && !error) {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id } : m));
+      }
+    } catch (e) {
+      console.log('Chat: Send failed', e);
+    }
+  }, [currentUserId, getActualRoomId]);
+
+  const handleSend = useCallback(async () => {
+    const text = inputText.trim();
+    if (!text) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setInputText('');
+    await sendContent(text);
+  }, [inputText, sendContent]);
+
+  // ── Image picker ───────────────────────────────────────────────────────────
+
+  const handlePickImage = useCallback(async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('アクセス許可が必要です', 'フォトライブラリへのアクセスを許可してください。');
+        return;
+      }
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await sendContent(encodeImageContent(uri));
+      }
+    } catch (e) {
+      console.log('Chat: Image pick failed', e);
+    }
+  }, [sendContent]);
+
+  // ── Reactions ──────────────────────────────────────────────────────────────
+
+  const handleAddReaction = useCallback((msgId: string, emoji: string) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMessageReactions(prev => ({
+      ...prev,
+      [msgId]: [...(prev[msgId] ?? []), emoji],
+    }));
+  }, []);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const renderMessage = useCallback(({ item }: { item: Message }) => {
+    const isMe = item.senderId === currentUserId;
+    return (
+      <MessageBubble
+        item={item}
+        isMe={isMe}
+        chatPlayer={chatPlayer}
+        language={language}
+        colors={colors}
+        styles={styles}
+        onLongPress={() => setPickerTarget(item.id)}
+        reactions={messageReactions[item.id] ?? []}
+      />
+    );
+  }, [chatPlayer, language, colors, styles, currentUserId, messageReactions]);
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: '' }} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.gold} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!chatPlayer) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: '' }} />
+        <View style={styles.center}>
+          <Text style={styles.notFoundText}>{t('conversation_not_found', language)}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Main render ────────────────────────────────────────────────────────────
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.textPrimary,
+          headerShadowVisible: false,
+          headerTitle: () => (
+            <Pressable
+              onPress={() => router.push(`/player/${chatPlayer.id}` as any)}
+              style={styles.headerTitle}
+            >
+              <View style={styles.headerAvatarWrapper}>
+                <Image
+                  source={{ uri: chatPlayer.avatar }}
+                  style={styles.headerAvatar}
+                  contentFit="cover"
+                />
+                {chatPlayer.isOnline && <View style={styles.headerOnlineDot} />}
+              </View>
+              <View>
+                <Text style={styles.headerName}>{chatPlayer.name}</Text>
+                <Text style={[styles.headerStatus, chatPlayer.isOnline && { color: colors.green }]}>
+                  {chatPlayer.isOnline ? t('online', language) : (chatPlayer.lastSeen ?? chatPlayer.lastActive)}
+                </Text>
+              </View>
+            </Pressable>
+          ),
+        }}
+      />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* Message list */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.messagesList}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <View style={styles.emptyChat}>
+              <Text style={[styles.emptyChatText, { color: colors.textMuted }]}>
+                メッセージを送ってみましょう
+              </Text>
+            </View>
+          }
+        />
+
+        {/* Input bar */}
+        <View style={styles.inputBar}>
+          {/* Image picker button */}
+          <Pressable
+            onPress={handlePickImage}
+            style={[styles.mediaBtn, { backgroundColor: colors.surfaceLight }]}
+          >
+            <ImagePlus size={20} color={colors.textSecondary} />
+          </Pressable>
+
+          {/* Text input */}
+          <TextInput
+            style={styles.input}
+            placeholder={t('type_message', language)}
+            placeholderTextColor={colors.textMuted}
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+            maxLength={1000}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
+          />
+
+          {/* Send button */}
+          <Pressable
+            onPress={handleSend}
+            style={[
+              styles.sendBtn,
+              { backgroundColor: inputText.trim() ? colors.gold : colors.surfaceLight },
+            ]}
+            disabled={!inputText.trim()}
+          >
+            <Send size={18} color={inputText.trim() ? colors.white : colors.textMuted} />
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Emoji Reaction Picker */}
+      <EmojiPicker
+        visible={pickerTarget !== null}
+        onSelect={emoji => {
+          if (pickerTarget) handleAddReaction(pickerTarget, emoji);
+          setPickerTarget(null);
+        }}
+        onClose={() => setPickerTarget(null)}
+        colors={colors}
+      />
+    </View>
+  );
+}
+
+// ─── Styles ────────────────────────────────────────────────────────────────────
+
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    keyboardView: {
+      flex: 1,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+    },
+    notFoundText: {
+      fontSize: 16,
+      color: colors.textMuted,
+    },
+    // Header
+    headerTitle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    headerAvatarWrapper: {
+      position: 'relative',
+    },
+    headerAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.surfaceLight,
+    },
+    headerOnlineDot: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 11,
+      height: 11,
+      borderRadius: 6,
+      backgroundColor: colors.green,
+      borderWidth: 2,
+      borderColor: colors.background,
+    },
+    headerName: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      color: colors.textPrimary,
+    },
+    headerStatus: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    // Messages list
+    messagesList: {
+      paddingHorizontal: 14,
+      paddingVertical: 16,
+      gap: 6,
+    },
+    emptyChat: {
+      alignItems: 'center',
+      paddingTop: 60,
+    },
+    emptyChatText: {
+      fontSize: 14,
+    },
+    // Bubbles
+    bubbleRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 8,
+      marginVertical: 2,
+    },
+    bubbleRowMe: {
+      justifyContent: 'flex-end',
+    },
+    bubbleRowOther: {
+      justifyContent: 'flex-start',
+    },
+    bubbleAvatar: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: colors.surfaceLight,
+      marginBottom: 4,
+    },
+    bubbleCol: {
+      maxWidth: '75%',
+      gap: 3,
+    },
+    bubbleColMe: {
+      alignItems: 'flex-end',
+    },
+    bubble: {
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      borderRadius: 20,
+    },
+    bubbleMe: {
+      backgroundColor: colors.gold,
+      borderBottomRightRadius: 5,
+    },
+    bubbleOther: {
+      backgroundColor: colors.surface,
+      borderBottomLeftRadius: 5,
+    },
+    bubbleText: {
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    bubbleTextMe: {
+      color: colors.white,
+    },
+    bubbleTextOther: {
+      color: colors.textPrimary,
+    },
+    imageMessage: {
+      width: 200,
+      height: 150,
+      borderRadius: 12,
+    },
+    // Meta row (time + read receipt)
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 2,
+    },
+    metaRowMe: {
+      justifyContent: 'flex-end',
+    },
+    metaTime: {
+      fontSize: 10,
+      color: colors.textMuted,
+    },
+    // Reactions
+    reactionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 4,
+      paddingHorizontal: 2,
+    },
+    reactionRowMe: {
+      justifyContent: 'flex-end',
+    },
+    reactionBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 12,
+      gap: 2,
+      borderWidth: 1,
+      borderColor: colors.divider,
+    },
+    reactionEmoji: {
+      fontSize: 14,
+    },
+    reactionCount: {
+      fontSize: 12,
+      fontWeight: '600' as const,
+    },
+    // Input bar
+    inputBar: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      paddingBottom: Platform.OS === 'ios' ? 12 : 10,
+      gap: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.divider,
+      backgroundColor: colors.background,
+    },
+    mediaBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    input: {
+      flex: 1,
+      backgroundColor: colors.surface,
+      borderRadius: 22,
+      paddingHorizontal: 16,
+      paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+      fontSize: 15,
+      color: colors.textPrimary,
+      maxHeight: 120,
+      minHeight: 40,
+    },
+    sendBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+}
