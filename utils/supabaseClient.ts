@@ -13,4 +13,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-console.log('Supabase client initialized:', SUPABASE_URL);
+console.log('=== SUPABASE DEBUG ===');
+console.log('SUPABASE_URL:', SUPABASE_URL);
+console.log('SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY);
+console.log('=====================');
