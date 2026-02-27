@@ -181,8 +181,16 @@ export default function EditProfileScreen() {
     });
 
     if (success) {
-      await updateAuthProfile({ name, avatar });
-      await reloadUser();
+      try {
+        await updateAuthProfile({ name, avatar });
+      } catch (authErr) {
+        console.log('EditProfile: updateAuthProfile failed (non-blocking)', authErr);
+      }
+      try {
+        await reloadUser();
+      } catch (reloadErr) {
+        console.log('EditProfile: reloadUser failed (non-blocking)', reloadErr);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       console.log('EditProfile: Profile saved to Supabase and both providers synced');
       Alert.alert(t('profile_updated', language), '', [
@@ -192,7 +200,7 @@ export default function EditProfileScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     }
-  }, [name, bio, location, avatar, skillLevel, timeControl, chessComRating, lichessRating, country, selectedLanguages, selectedPlayStyles, updateProfile, updateAuthProfile, language, router]);
+  }, [name, bio, location, avatar, skillLevel, timeControl, chessComRating, lichessRating, country, selectedLanguages, selectedPlayStyles, updateProfile, updateAuthProfile, reloadUser, language, router]);
 
   const filteredCountries = useMemo(() => {
     if (!countrySearch.trim()) return [...COUNTRY_OPTIONS];

@@ -346,64 +346,76 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   useEffect(() => {
     const loadSupabaseData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.log('ChessProvider: No authenticated user, skipping Supabase load');
-          return;
+        let userId: string | null = null;
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          userId = user?.id ?? null;
+        } catch (authErr) {
+          console.log('ChessProvider: auth.getUser failed (non-blocking)', authErr);
         }
 
-        setCurrentUserId(user.id);
-
-        await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
-
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (profileData && !profileError) {
-          console.log('ChessProvider: Loaded profile from Supabase', profileData.name);
-          const defaultAvatar = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
-          setProfile({
-            id: user.id,
-            name: profileData.name ?? '',
-            email: profileData.email ?? user.email ?? '',
-            avatar: profileData.avatar ?? defaultAvatar,
-            bio: profileData.bio ?? '',
-            bioEn: '',
-            rating: profileData.rating ?? 0,
-            chessComRating: profileData.chess_com_rating ?? null,
-            lichessRating: profileData.lichess_rating ?? null,
-            skillLevel: (profileData.skill_level as SkillLevel) ?? 'beginner',
-            preferredTimeControl: profileData.preferred_time_control ?? '15+10',
-            location: profileData.location ?? '',
-            joinedDate: profileData.created_at ? new Date(profileData.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' }) : '',
-            languages: profileData.languages ?? [],
-            country: profileData.country ?? undefined,
-            gamesPlayed: profileData.games_played ?? 0,
-            wins: profileData.wins ?? 0,
-            losses: profileData.losses ?? 0,
-            draws: profileData.draws ?? 0,
-            distance: 0,
-            isOnline: true,
-            lastActive: '',
-            coordinates: {
-              latitude: profileData.latitude ?? 0,
-              longitude: profileData.longitude ?? 0,
-            },
-            playStyles: (profileData.play_styles as PlayStyle[]) ?? [],
-          });
-          setProfileLoaded(true);
-        } else {
-          console.log('ChessProvider: No profile found in Supabase, using defaults');
+        if (!userId) {
+          console.log('ChessProvider: No authenticated user, setting profileLoaded=true for anonymous use');
           setProfileLoaded(true);
         }
 
+        if (userId) {
+          setCurrentUserId(userId);
+        }
+
+        if (userId) {
+          await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', userId);
+
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+          if (profileData && !profileError) {
+            console.log('ChessProvider: Loaded profile from Supabase', profileData.name);
+            const defaultAvatar = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
+            setProfile({
+              id: userId,
+              name: profileData.name ?? '',
+              email: profileData.email ?? '',
+              avatar: profileData.avatar ?? defaultAvatar,
+              bio: profileData.bio ?? '',
+              bioEn: '',
+              rating: profileData.rating ?? 0,
+              chessComRating: profileData.chess_com_rating ?? null,
+              lichessRating: profileData.lichess_rating ?? null,
+              skillLevel: (profileData.skill_level as SkillLevel) ?? 'beginner',
+              preferredTimeControl: profileData.preferred_time_control ?? '15+10',
+              location: profileData.location ?? '',
+              joinedDate: profileData.created_at ? new Date(profileData.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' }) : '',
+              languages: profileData.languages ?? [],
+              country: profileData.country ?? undefined,
+              gamesPlayed: profileData.games_played ?? 0,
+              wins: profileData.wins ?? 0,
+              losses: profileData.losses ?? 0,
+              draws: profileData.draws ?? 0,
+              distance: 0,
+              isOnline: true,
+              lastActive: '',
+              coordinates: {
+                latitude: profileData.latitude ?? 0,
+                longitude: profileData.longitude ?? 0,
+              },
+              playStyles: (profileData.play_styles as PlayStyle[]) ?? [],
+            });
+            setProfileLoaded(true);
+          } else {
+            console.log('ChessProvider: No profile found in Supabase, using defaults');
+            setProfileLoaded(true);
+          }
+        }
+
+        const safeUserId = userId ?? 'no-user';
         const { data: nearbyProfiles, error: nearbyError } = await supabase
           .from('profiles')
           .select('*')
-          .neq('id', user.id);
+          .neq('id', safeUserId);
 
         if (nearbyProfiles && !nearbyError && nearbyProfiles.length > 0) {
           const userLat = userLocation?.latitude;
@@ -421,25 +433,29 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           setActiveUsersCount(activeCount + 1);
         }
 
-        const { data: blocksData } = await supabase
-          .from('blocks')
-          .select('blocked_id')
-          .eq('blocker_id', user.id);
-        const blockedIds = (blocksData ?? []).map((b: { blocked_id: string }) => b.blocked_id);
+        let blockedIds: string[] = [];
+        if (userId) {
+          const { data: blocksData } = await supabase
+            .from('blocks')
+            .select('blocked_id')
+            .eq('blocker_id', userId);
+          blockedIds = (blocksData ?? []).map((b: { blocked_id: string }) => b.blocked_id);
+        }
         setBlockedUsers(blockedIds);
         console.log('ChessProvider: Loaded', blockedIds.length, 'blocked users');
 
+        if (userId) {
         const { data: matchData, error: matchError } = await supabase
           .from('matches')
           .select('*')
-          .or(`requester_id.eq.${user.id},opponent_id.eq.${user.id}`)
+          .or(`requester_id.eq.${userId},opponent_id.eq.${userId}`)
           .order('requested_at', { ascending: false });
 
         if (matchData && !matchError && matchData.length > 0) {
           console.log('ChessProvider: Loaded', matchData.length, 'matches from Supabase');
           const supabaseMatches = await Promise.all(
             matchData.map(async (m: SupabaseMatch) => {
-              const isIncoming = m.opponent_id === user.id;
+              const isIncoming = m.opponent_id === userId;
               const opponentId = isIncoming ? m.requester_id : m.opponent_id;
 
               let opponent = await fetchPlayerProfile(opponentId);
@@ -475,7 +491,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
                 if (matchResult === 'draw') {
                   localResult = 'draw';
                 } else {
-                  localResult = m.winner_id === user.id ? 'win' : 'loss';
+                  localResult = m.winner_id === userId ? 'win' : 'loss';
                 }
               }
 
@@ -494,6 +510,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           );
 
           setMatches(supabaseMatches);
+        }
         }
 
         const { data: postsData } = await supabase
@@ -544,10 +561,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           console.log('ChessProvider: No posts found in Supabase');
         }
 
+        if (userId) {
         const { data: notifsData } = await supabase
           .from('notifications')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(50);
 
@@ -563,6 +581,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           }));
           setNotifications(mapped);
           console.log('ChessProvider: Loaded', mapped.length, 'notifications from Supabase');
+        }
         }
       } catch (e) {
         console.log('ChessProvider: Supabase data load failed', e);
@@ -1007,8 +1026,26 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     console.log('Profile updated locally', updates);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
+      let userId: string | null = currentUserId;
+
+      if (!userId || userId === 'me') {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          userId = user?.id ?? null;
+        } catch (authErr) {
+          console.log('Profile update: auth.getUser failed (non-blocking)', authErr);
+        }
+      }
+
+      if (!userId || userId === 'me') {
+        userId = profile.id !== 'me' ? profile.id : null;
+      }
+
+      if (!userId || userId === 'me') {
+        const fallbackId = 'anonymous-' + Date.now();
+        console.log('Profile update: No user ID available, using fallback', fallbackId);
+        userId = fallbackId;
+      }
 
       const supabaseUpdates: Record<string, unknown> = {};
       if (updates.name !== undefined) supabaseUpdates.name = updates.name;
@@ -1029,13 +1066,15 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       }
 
       if (Object.keys(supabaseUpdates).length > 0) {
-        supabaseUpdates.id = user.id;
-        const { error } = await supabase.from('profiles').upsert(supabaseUpdates);
+        supabaseUpdates.id = userId;
+        supabaseUpdates.last_seen = new Date().toISOString();
+        console.log('Profile upsert payload:', JSON.stringify(supabaseUpdates));
+        const { data, error } = await supabase.from('profiles').upsert(supabaseUpdates).select();
         if (error) {
-          console.log('Profile upsert error:', error.message);
+          console.log('Profile upsert error:', error.message, error.details, error.hint);
           return false;
         }
-        console.log('Profile synced to Supabase successfully');
+        console.log('Save successful:', JSON.stringify(data));
         return true;
       }
       return true;
@@ -1043,7 +1082,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       console.log('Profile Supabase sync failed', e);
       return false;
     }
-  }, []);
+  }, [currentUserId, profile.id]);
 
   const updateRatingAfterResult = useCallback(async (
     myResult: 'win' | 'loss' | 'draw',
