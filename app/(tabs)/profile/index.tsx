@@ -50,7 +50,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  if (!user) return null;
+  if (!user || !profile) return null;
 
   const stats = [
     {
