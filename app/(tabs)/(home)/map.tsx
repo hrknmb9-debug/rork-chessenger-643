@@ -86,7 +86,7 @@ export default function MapScreen() {
                 <Image source={{ uri: player.avatar }} style={styles.playerAvatar} contentFit="cover" />
                 <View style={styles.playerInfo}>
                   <Text style={styles.playerName}>{player.name}</Text>
-                  <Text style={styles.playerLocation}>{player.location} · {player.distance}km</Text>
+                  <Text style={styles.playerLocation}>{player.location + ' · ' + player.distance + 'km'}</Text>
                 </View>
                 <View style={[styles.onlineDot, { backgroundColor: player.isOnline ? colors.green : colors.textMuted }]} />
               </Pressable>

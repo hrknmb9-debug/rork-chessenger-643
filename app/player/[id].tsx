@@ -238,7 +238,7 @@ export default function PlayerDetailScreen() {
                 <MapPin size={14} color={colors.textMuted} />
               )}
               <Text style={[styles.metaText, userLocation ? styles.metaTextHighlight : undefined]}>
-                {player.location} · {formatDistance(player.distance)}
+                {player.location + ' · ' + formatDistance(player.distance)}
               </Text>
             </View>
             <View style={styles.metaItem}>
