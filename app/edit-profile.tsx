@@ -81,54 +81,50 @@ export default function EditProfileScreen() {
 
   const uploadAvatarToSupabase = useCallback(async (uri: string): Promise<string | null> => {
     if (!user?.id || user.id === 'me') {
-      console.log('Avatar upload: No valid user ID, using local URI');
-      return uri;
+      console.log('Avatar upload: No valid user ID');
+      return null;
     }
 
     try {
       setIsUploadingAvatar(true);
-      console.log('Avatar upload: Starting upload for user', user.id);
+      console.log('Avatar upload: Starting for user', user.id, 'uri:', uri.slice(0, 60));
 
       const response = await fetch(uri);
+      if (!response.ok) {
+        console.log('Avatar upload: fetch failed', response.status);
+        return null;
+      }
       const blob = await response.blob();
 
-      const fileExt = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-      const filePath = `${user.id}/avatar.${fileExt}`;
+      // Always store as jpg to keep filePath predictable
+      const fileExt = uri.includes('.png') ? 'png' : 'jpg';
+      const filePath = user.id + '/avatar.' + fileExt;
+      const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
       const { error: uploadError } = await supabaseNoAuth.storage
         .from('avatars')
-        .upload(filePath, blob, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: `image/${fileExt === 'png' ? 'png' : 'jpeg'}`,
-        });
+        .upload(filePath, blob, { cacheControl: '3600', upsert: true, contentType });
 
       if (uploadError) {
-        console.log('Avatar upload: Storage upload error', uploadError.message);
-        return uri;
+        console.log('Avatar upload: Storage error', uploadError.message);
+        return null;
       }
 
-      const { data: publicUrlData } = supabaseNoAuth.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
+      console.log('Avatar upload: Success, filePath:', filePath);
 
-      const publicUrl = publicUrlData.publicUrl + '?t=' + Date.now();
-      console.log('Avatar upload: Success, public URL:', publicUrl);
-
+      // Save only the storage path to DB — resolveAvatarUrl will construct the full URL
       const { error: upsertError } = await supabaseNoAuth
         .from('profiles')
-        .upsert({ id: user.id, avatar: publicUrl });
+        .upsert({ id: user.id, avatar: filePath });
 
       if (upsertError) {
         console.log('Avatar upload: Profile upsert error', upsertError.message);
-      } else {
-        console.log('Avatar upload: Profile avatar saved to Supabase');
       }
 
-      return publicUrl;
+      return filePath;
     } catch (e) {
-      console.log('Avatar upload: Failed', e);
-      return uri;
+      console.log('Avatar upload: Exception', e);
+      return null;
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -137,26 +133,31 @@ export default function EditProfileScreen() {
   const handlePickAvatar = useCallback(async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
         const localUri = result.assets[0].uri;
+        // Show local preview immediately while uploading
         setAvatar(localUri);
-        console.log('Avatar picked:', localUri);
 
-        const uploadedUrl = await uploadAvatarToSupabase(localUri);
-        if (uploadedUrl && uploadedUrl !== localUri) {
-          setAvatar(uploadedUrl);
-          console.log('Avatar updated to Supabase URL:', uploadedUrl);
+        const storagePath = await uploadAvatarToSupabase(localUri);
+        if (storagePath) {
+          // Replace local preview with the server storage path
+          setAvatar(storagePath);
+          console.log('Avatar state set to storage path:', storagePath);
+        } else {
+          // Upload failed — revert to previous avatar, do not persist local path
+          setAvatar(profile.avatar);
+          Alert.alert('Upload failed', 'Could not upload avatar. Please try again.');
         }
       }
     } catch (e) {
       console.log('Image picker error:', e);
     }
-  }, [uploadAvatarToSupabase]);
+  }, [uploadAvatarToSupabase, profile.avatar]);
 
   const { updateProfile: updateAuthProfile, reloadUser } = useAuth();
 
