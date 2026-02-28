@@ -1,9 +1,9 @@
-import { supabase } from './supabaseClient';
-
-const BUCKET = 'avatars';
+// No supabase client dependency — URL is built from env var only.
+// Public bucket URLs always work regardless of auth state or api.rork.com connectivity.
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '');
+const PUBLIC_AVATAR_BASE = SUPABASE_URL + '/storage/v1/object/public/avatars/';
 
 export function resolveAvatarUrl(raw: string | null | undefined, name?: string): string {
-  // Initials fallback — always works, no network dependency
   const initials = name && name.trim().length > 0 ? name.trim() : 'U';
   const fallback =
     'https://ui-avatars.com/api/?name=' +
@@ -12,10 +12,11 @@ export function resolveAvatarUrl(raw: string | null | undefined, name?: string):
 
   if (!raw) return fallback;
 
-  // Already a full URL (external or Supabase Storage public URL)
+  // Already a full URL (http/https) — return as-is
   if (raw.startsWith('http')) return raw;
 
-  // Storage path (e.g. "user-id/avatar.jpg") → getPublicUrl (synchronous, no network call)
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(raw);
-  return data?.publicUrl || fallback;
+  // Storage path (e.g. "user-id/avatar.jpg") → direct public URL, no auth required
+  if (SUPABASE_URL) return PUBLIC_AVATAR_BASE + raw;
+
+  return fallback;
 }
