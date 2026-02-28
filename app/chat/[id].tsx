@@ -32,6 +32,13 @@ interface SupabaseMessage {
   created_at: string;
 }
 
+function decodeContent(content: string): { isImage: boolean; value: string } {
+  if (content.startsWith('__IMG__')) {
+    return { isImage: true, value: content.slice(7) };
+  }
+  return { isImage: false, value: content };
+}
+
 export default function ChatScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -145,7 +152,13 @@ export default function ChatScreen() {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) {
+          console.log('Chat: Realtime subscribe error', err);
+        } else {
+          console.log('Chat: Realtime subscribe status', status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -230,6 +243,7 @@ export default function ChatScreen() {
 
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === currentUserId;
+    const { isImage, value } = decodeContent(item.text);
     return (
       <View
         style={[
@@ -248,16 +262,25 @@ export default function ChatScreen() {
           style={[
             styles.messageBubble,
             isMe ? styles.messageBubbleMe : styles.messageBubbleOther,
+            isImage && styles.messageBubbleImage,
           ]}
         >
-          <Text
-            style={[
-              styles.messageText,
-              isMe ? styles.messageTextMe : styles.messageTextOther,
-            ]}
-          >
-            {item.text}
-          </Text>
+          {isImage ? (
+            <Image
+              source={{ uri: value }}
+              style={styles.imageMessage}
+              contentFit="cover"
+            />
+          ) : (
+            <Text
+              style={[
+                styles.messageText,
+                isMe ? styles.messageTextMe : styles.messageTextOther,
+              ]}
+            >
+              {item.text}
+            </Text>
+          )}
           <Text
             style={[
               styles.messageTime,
@@ -423,6 +446,14 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: 14,
       paddingVertical: 10,
       borderRadius: 18,
+    },
+    messageBubbleImage: {
+      padding: 4,
+    },
+    imageMessage: {
+      width: 200,
+      height: 150,
+      borderRadius: 12,
     },
     messageBubbleMe: {
       backgroundColor: colors.gold,
