@@ -106,19 +106,35 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
       } catch (e) {
         console.log('Auth: Failed to load user', e);
+        // Native: AsyncStorage フォールバック
         try {
           const stored = await AsyncStorage.getItem(AUTH_KEY);
           if (stored) {
             const parsed = JSON.parse(stored) as AuthUser;
             if (parsed.id && parsed.id !== 'me') {
               setUser(parsed);
-              console.log('Auth: Fallback to storage', parsed.name);
+              console.log('Auth: Fallback to AsyncStorage', parsed.name);
             } else {
               await AsyncStorage.removeItem(AUTH_KEY);
             }
           }
         } catch (err) {
-          console.log('Auth: Storage fallback failed', err);
+          console.log('Auth: AsyncStorage fallback failed', err);
+        }
+        // Web: localStorage フォールバック
+        if (typeof localStorage !== 'undefined') {
+          try {
+            const lsStored = localStorage.getItem('chess_auth_user');
+            if (lsStored) {
+              const parsed = JSON.parse(lsStored) as AuthUser;
+              if (parsed.id && parsed.id !== 'me') {
+                setUser(parsed);
+                console.log('Auth: Fallback to localStorage', parsed.name);
+              }
+            }
+          } catch (lsErr) {
+            console.log('Auth: localStorage fallback failed', lsErr);
+          }
         }
       } finally {
         initialLoadDone.current = true;
@@ -203,14 +219,25 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           data.user.user_metadata?.name ?? email.split('@')[0],
           defaultAvatar
         );
+        // Native: AsyncStorage に書き込み
         try {
           await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
-          console.log('Auth: AsyncStorage write success for', AUTH_KEY);
+          console.log('Auth: AsyncStorage write OK');
         } catch (storageErr) {
           console.log('Auth: AsyncStorage write FAILED', storageErr);
         }
+        // Web: localStorage に手動書き込み（DevTools で確認用）
+        if (typeof localStorage !== 'undefined' && data.session) {
+          try {
+            localStorage.setItem('chess_auth_user', JSON.stringify(authUser));
+            localStorage.setItem('chess_session_expires', String(data.session.expires_at ?? ''));
+            console.log('Auth: localStorage write OK, expires=' + data.session.expires_at);
+          } catch (lsErr) {
+            console.log('Auth: localStorage write FAILED', lsErr);
+          }
+        }
         setUser(authUser);
-        console.log('Auth: Supabase login success', authUser.name, '| session expires:', data.session?.expires_at);
+        console.log('Auth: login success', authUser.name, '| session expires:', data.session?.expires_at);
         return true;
       }
       return false;
