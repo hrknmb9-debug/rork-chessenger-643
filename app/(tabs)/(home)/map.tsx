@@ -57,7 +57,7 @@ export default function MapScreen() {
 
   const handlePlayerPress = useCallback((player: Player) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(`/player/${player.id}` as any);
+    router.push(('/player/' + player.id) as any);
   }, [router]);
 
   if (!MapView || !Marker) {

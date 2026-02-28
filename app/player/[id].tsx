@@ -131,7 +131,7 @@ export default function PlayerDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     const roomId = [currentUserId, id].sort().join('_');
-    router.push(`/chat/${roomId}` as any);
+    router.push(('/chat/' + roomId) as any);
     console.log('Navigate to message for player:', id);
   }, [player, id, router, currentUserId]);
 

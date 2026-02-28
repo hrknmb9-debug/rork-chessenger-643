@@ -161,7 +161,7 @@ export default function HomeScreen() {
         data={filteredPlayers}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <PlayerCard player={item} onPress={() => router.push(`/player/${item.id}` as any)} onMessagePress={() => router.push(`/chat/new_${item.id}` as any)} language={language} />
+          <PlayerCard player={item} onPress={() => router.push(('/player/' + item.id) as any)} onMessagePress={() => router.push(('/chat/new_' + item.id) as any)} language={language} />
         )}
         ListHeaderComponent={
           <View style={styles.listHeader}>
@@ -178,7 +178,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.onlineSection}>
-              <OnlineStrip players={players} onPress={p => router.push(`/player/${p.id}` as any)} colors={colors} language={language} />
+              <OnlineStrip players={players} onPress={p => router.push(('/player/' + p.id) as any)} colors={colors} language={language} />
             </View>
 
             <View style={styles.searchBar}>
