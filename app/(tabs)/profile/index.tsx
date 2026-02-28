@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -50,7 +51,15 @@ export default function ProfileScreen() {
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  if (!user || !profile) return null;
+  if (!user) return null;
+  if (!profile) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 12, color: '#888' }}>{'Loading Profile (ID: ' + (user?.id ?? '...') + ')'}</Text>
+      </View>
+    );
+  }
 
   const stats = [
     {
