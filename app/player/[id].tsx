@@ -50,114 +50,77 @@ export default function PlayerDetailScreen() {
   const { players, sendMatchRequest, language, toggleLanguage, blockUser, unblockUser, isUserBlocked, currentUserId } = useChess();
   const { userLocation } = useLocation();
   const router = useRouter();
-  const [selectedTime, setSelectedTime] = useState<string>('15+10');
-  const [showTimeSelector, setShowTimeSelector] = useState<boolean>(false);
-  const [requestSent, setRequestSent] = useState<boolean>(false);
-  const [showTranslatedBio, setShowTranslatedBio] = useState<boolean>(false);
+  const [selectedTime, setSelectedTime] = useState('15+10');
+  const [showTimeSelector, setShowTimeSelector] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
+  const [showTranslatedBio, setShowTranslatedBio] = useState(false);
 
   const buttonAnim = useRef(new Animated.Value(1)).current;
   const sentAnim = useRef(new Animated.Value(0)).current;
 
   const player = useMemo(() => players.find(p => p.id === id), [players, id]);
-
-  const winRate = useMemo(
-    () => (player ? getWinRate(player.wins, player.gamesPlayed) : 0),
-    [player]
-  );
+  const winRate = useMemo(() => (player ? getWinRate(player.wins, player.gamesPlayed) : 0), [player]);
+  const playerBlocked = useMemo(() => (id ? isUserBlocked(id) : false), [id, isUserBlocked]);
 
   const handleSendRequest = useCallback(() => {
     if (!player) return;
-
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-
     Animated.sequence([
-      Animated.timing(buttonAnim, {
-        toValue: 0.92,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
+      Animated.timing(buttonAnim, { toValue: 0.92, duration: 100, useNativeDriver: true }),
+      Animated.timing(buttonAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
     ]).start();
-
     sendMatchRequest(player, selectedTime);
     setRequestSent(true);
-
-    Animated.timing(sentAnim, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-
+    Animated.timing(sentAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     Alert.alert(
       t('request_sent_title', language),
-      `${player.name}${t('request_sent_desc', language)}`,
+      player.name + t('request_sent_desc', language),
       [{ text: 'OK' }]
     );
   }, [player, selectedTime, sendMatchRequest, buttonAnim, sentAnim, language]);
 
   const toggleTimeSelector = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.selectionAsync();
-    }
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
     setShowTimeSelector(prev => !prev);
   }, []);
 
   const selectTime = useCallback((time: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.selectionAsync();
-    }
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
     setSelectedTime(time);
     setShowTimeSelector(false);
   }, []);
 
   const handleToggleBioTranslation = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.selectionAsync();
-    }
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
     setShowTranslatedBio(prev => !prev);
   }, []);
 
-  const playerBlocked = useMemo(() => id ? isUserBlocked(id) : false, [id, isUserBlocked]);
-
   const handleSendMessage = useCallback(() => {
     if (!player || !id || !currentUserId) return;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const roomId = [currentUserId, id].sort().join('_');
     router.push(('/chat/' + roomId) as any);
-    console.log('Navigate to message for player:', id);
   }, [player, id, router, currentUserId]);
 
   const handleBlockToggle = useCallback(() => {
     if (!id) return;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (playerBlocked) {
       unblockUser(id);
-      Alert.alert(t('unblock_user', language), `${player?.name ?? ''}`);
+      Alert.alert(t('unblock_user', language), player ? player.name : '');
     } else {
       Alert.alert(
         t('block_confirm', language),
         t('block_confirm_desc', language),
         [
           { text: t('cancel', language), style: 'cancel' },
-          {
-            text: t('block_user', language),
-            style: 'destructive',
-            onPress: () => blockUser(id),
-          },
+          { text: t('block_user', language), style: 'destructive', onPress: () => blockUser(id) },
         ]
       );
     }
-  }, [id, playerBlocked, blockUser, unblockUser, language, player?.name]);
+  }, [id, playerBlocked, blockUser, unblockUser, language, player]);
 
   if (!player) {
     return (
@@ -171,6 +134,7 @@ export default function PlayerDetailScreen() {
   const skillColor = getSkillColor(player.skillLevel, colors);
   const skillBg = getSkillBgColor(player.skillLevel, colors);
   const bioText = showTranslatedBio && player.bioEn ? player.bioEn : player.bio;
+  const locationText = player.location + ' ' + formatDistance(player.distance);
 
   return (
     <View style={styles.container}>
@@ -195,14 +159,11 @@ export default function PlayerDetailScreen() {
           ),
         }}
       />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.avatarWrapper}>
             <Image source={{ uri: player.avatar }} style={styles.avatar} contentFit="cover" />
-            {player.isOnline && <View style={styles.onlineIndicator} />}
+            {player.isOnline ? <View style={styles.onlineIndicator} /> : null}
           </View>
 
           <Text style={styles.name}>{player.name}</Text>
@@ -211,19 +172,20 @@ export default function PlayerDetailScreen() {
             <View style={styles.platformRatings}>
               <View style={styles.platformRatingItem}>
                 <Text style={styles.platformLabel}>Chess.com</Text>
-                <Text style={[styles.ratingValue, player.chessComRating === null && styles.noExpText]}>
+                <Text style={[styles.ratingValue, player.chessComRating === null ? styles.noExpText : null]}>
                   {formatRating(player.chessComRating, language)}
                 </Text>
               </View>
               <View style={styles.ratingDivider} />
               <View style={styles.platformRatingItem}>
                 <Text style={styles.platformLabel}>Lichess</Text>
-                <Text style={[styles.ratingValue, player.lichessRating === null && styles.noExpText]}>
+                <Text style={[styles.ratingValue, player.lichessRating === null ? styles.noExpText : null]}>
                   {formatRating(player.lichessRating, language)}
                 </Text>
               </View>
             </View>
           </View>
+
           <View style={[styles.skillBadge, { backgroundColor: skillBg }]}>
             <Text style={[styles.skillText, { color: skillColor }]}>
               {getSkillLabel(player.skillLevel, language)}
@@ -237,8 +199,8 @@ export default function PlayerDetailScreen() {
               ) : (
                 <MapPin size={14} color={colors.textMuted} />
               )}
-              <Text style={[styles.metaText, userLocation ? styles.metaTextHighlight : undefined]}>
-                {player.location + ' · ' + formatDistance(player.distance)}
+              <Text style={[styles.metaText, userLocation ? styles.metaTextHighlight : null]}>
+                {locationText}
               </Text>
             </View>
             <View style={styles.metaItem}>
@@ -247,7 +209,7 @@ export default function PlayerDetailScreen() {
             </View>
           </View>
 
-          {player.languages.length > 0 && (
+          {player.languages.length > 0 ? (
             <View style={styles.languagesRow}>
               <Globe size={13} color={colors.textMuted} />
               {player.languages.map(lang => (
@@ -257,32 +219,23 @@ export default function PlayerDetailScreen() {
                 </View>
               ))}
             </View>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>{t('bio', language)}</Text>
-            {player.bioEn && (
+            {player.bioEn ? (
               <Pressable
                 onPress={handleToggleBioTranslation}
-                style={[
-                  styles.bioTranslateBtn,
-                  showTranslatedBio ? styles.bioTranslateBtnActive : undefined,
-                ]}
-                testID="bio-translate-btn"
+                style={[styles.bioTranslateBtn, showTranslatedBio ? styles.bioTranslateBtnActive : null]}
               >
                 <Languages size={13} color={showTranslatedBio ? colors.gold : colors.textMuted} />
-                <Text
-                  style={[
-                    styles.bioTranslateText,
-                    showTranslatedBio ? styles.bioTranslateTextActive : undefined,
-                  ]}
-                >
+                <Text style={[styles.bioTranslateText, showTranslatedBio ? styles.bioTranslateTextActive : null]}>
                   {showTranslatedBio ? t('original', language) : t('translate', language)}
                 </Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
           <View style={styles.bioCard}>
             <Text style={styles.bioText}>{bioText}</Text>
@@ -297,16 +250,15 @@ export default function PlayerDetailScreen() {
             <StatBox label={t('losses', language)} value={player.losses} color={colors.red} />
             <StatBox label={t('draws', language)} value={player.draws} />
           </View>
-
           <View style={styles.winRateRow}>
             <View style={styles.winRateInfo}>
               <Trophy size={16} color={colors.gold} />
               <Text style={styles.winRateLabel}>{t('win_rate', language)}</Text>
             </View>
             <View style={styles.winRateBarBg}>
-              <View style={[styles.winRateBarFill, { width: `${winRate}%` }]} />
+              <View style={[styles.winRateBarFill, { width: (winRate + '%') as any }]} />
             </View>
-            <Text style={styles.winRatePercent}>{winRate}%</Text>
+            <Text style={styles.winRatePercent}>{winRate + '%'}</Text>
           </View>
         </View>
 
@@ -322,7 +274,7 @@ export default function PlayerDetailScreen() {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <Pressable onPress={handleSendMessage} style={styles.messageButton} testID="send-message-btn">
+        <Pressable onPress={handleSendMessage} style={styles.messageButton}>
           <MessageCircle size={18} color={colors.gold} />
         </Pressable>
 
@@ -335,19 +287,18 @@ export default function PlayerDetailScreen() {
         <Animated.View style={{ flex: 1, transform: [{ scale: buttonAnim }] }}>
           <Pressable
             onPress={handleSendRequest}
-            style={[styles.sendButton, requestSent && styles.sendButtonSent]}
+            style={[styles.sendButton, requestSent ? styles.sendButtonSent : null]}
             disabled={requestSent}
-            testID="send-request-btn"
           >
             <Send size={18} color={requestSent ? colors.green : colors.white} />
-            <Text style={[styles.sendButtonText, requestSent && styles.sendButtonTextSent]}>
+            <Text style={[styles.sendButtonText, requestSent ? styles.sendButtonTextSent : null]}>
               {requestSent ? t('sent', language) : t('send_request', language)}
             </Text>
           </Pressable>
         </Animated.View>
       </View>
 
-      {showTimeSelector && (
+      {showTimeSelector ? (
         <View style={styles.timeSelectorOverlay}>
           <Pressable style={styles.overlayBg} onPress={toggleTimeSelector} />
           <View style={styles.timeSelectorSheet}>
@@ -356,403 +307,84 @@ export default function PlayerDetailScreen() {
               <Pressable
                 key={tc}
                 onPress={() => selectTime(tc)}
-                style={[
-                  styles.timeOption,
-                  selectedTime === tc && styles.timeOptionActive,
-                ]}
+                style={[styles.timeOption, selectedTime === tc ? styles.timeOptionActive : null]}
               >
-                <Text
-                  style={[
-                    styles.timeOptionText,
-                    selectedTime === tc && styles.timeOptionTextActive,
-                  ]}
-                >
+                <Text style={[styles.timeOptionText, selectedTime === tc ? styles.timeOptionTextActive : null]}>
                   {tc}
                 </Text>
               </Pressable>
             ))}
           </View>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    scrollContent: {
-      paddingBottom: 20,
-    },
-    errorContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: colors.background,
-    },
-    errorText: {
-      fontSize: 16,
-      color: colors.textMuted,
-    },
-    headerRight: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    headerBlockBtn: {
-      padding: 6,
-    },
-    headerTranslateBtn: {
-      padding: 6,
-    },
-    hero: {
-      alignItems: 'center',
-      paddingTop: 24,
-      paddingBottom: 24,
-      paddingHorizontal: 20,
-    },
-    avatarWrapper: {
-      position: 'relative',
-      marginBottom: 16,
-    },
-    avatar: {
-      width: 110,
-      height: 110,
-      borderRadius: 55,
-      backgroundColor: colors.surfaceLight,
-      borderWidth: 3,
-      borderColor: colors.gold,
-    },
-    onlineIndicator: {
-      position: 'absolute',
-      bottom: 6,
-      right: 6,
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      backgroundColor: colors.green,
-      borderWidth: 3,
-      borderColor: colors.background,
-    },
-    name: {
-      fontSize: 26,
-      fontWeight: '700' as const,
-      color: colors.textPrimary,
-      marginBottom: 8,
-    },
-    ratingRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: 10,
-      marginBottom: 10,
-    },
-    platformRatings: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      gap: 16,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    platformRatingItem: {
-      alignItems: 'center' as const,
-    },
-    platformLabel: {
-      fontSize: 10,
-      fontWeight: '600' as const,
-      color: colors.textMuted,
-      marginBottom: 2,
-      textTransform: 'uppercase' as const,
-      letterSpacing: 0.5,
-    },
-    ratingValue: {
-      fontSize: 20,
-      fontWeight: '800' as const,
-      color: colors.gold,
-    },
-    noExpText: {
-      fontSize: 14,
-      fontWeight: '600' as const,
-      color: colors.orange,
-    },
-    ratingDivider: {
-      width: 1,
-      height: 28,
-      backgroundColor: colors.divider,
-    },
-    skillBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 8,
-      marginBottom: 14,
-    },
-    skillText: {
-      fontSize: 12,
-      fontWeight: '600' as const,
-    },
-    metaRow: {
-      flexDirection: 'row',
-      gap: 20,
-      marginBottom: 12,
-    },
-    metaItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    metaText: {
-      fontSize: 13,
-      color: colors.textMuted,
-    },
-    metaTextHighlight: {
-      color: colors.blue,
-      fontWeight: '500' as const,
-    },
-    languagesRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      flexWrap: 'wrap',
-    },
-    langTag: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: colors.surface,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 8,
-    },
-    langTagFlag: {
-      fontSize: 12,
-    },
-    langTagText: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      fontWeight: '500' as const,
-    },
-    section: {
-      marginHorizontal: 16,
-      marginBottom: 20,
-    },
-    sectionTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 10,
-    },
-    sectionTitle: {
-      fontSize: 13,
-      fontWeight: '600' as const,
-      color: colors.textMuted,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    bioTranslateBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 8,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    bioTranslateBtnActive: {
-      borderColor: colors.gold + '4D',
-      backgroundColor: colors.goldMuted,
-    },
-    bioTranslateText: {
-      fontSize: 11,
-      fontWeight: '600' as const,
-      color: colors.textMuted,
-    },
-    bioTranslateTextActive: {
-      color: colors.gold,
-    },
-    bioCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    bioText: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      lineHeight: 22,
-    },
-    statsGrid: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: 12,
-    },
-    winRateRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 14,
-      gap: 10,
-    },
-    winRateInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    winRateLabel: {
-      fontSize: 13,
-      color: colors.textMuted,
-      fontWeight: '500' as const,
-    },
-    winRateBarBg: {
-      flex: 1,
-      height: 6,
-      backgroundColor: colors.surfaceHighlight,
-      borderRadius: 3,
-      overflow: 'hidden',
-    },
-    winRateBarFill: {
-      height: '100%',
-      backgroundColor: colors.gold,
-      borderRadius: 3,
-    },
-    winRatePercent: {
-      fontSize: 15,
-      fontWeight: '700' as const,
-      color: colors.gold,
-      minWidth: 40,
-      textAlign: 'right',
-    },
-    preferredTime: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 14,
-    },
-    preferredTimeText: {
-      fontSize: 16,
-      fontWeight: '600' as const,
-      color: colors.textPrimary,
-    },
-    bottomBar: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 34,
-      backgroundColor: colors.background,
-      borderTopWidth: 1,
-      borderTopColor: colors.divider,
-    },
-    messageButton: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: 48,
-      height: 48,
-      backgroundColor: colors.goldMuted,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.gold + '33',
-    },
-    timeSelector: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 14,
-      paddingVertical: 14,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    timeSelectorText: {
-      fontSize: 14,
-      fontWeight: '600' as const,
-      color: colors.textPrimary,
-    },
-    sendButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      borderRadius: 12,
-      backgroundColor: colors.gold,
-    },
-    sendButtonSent: {
-      backgroundColor: colors.greenMuted,
-    },
-    sendButtonText: {
-      fontSize: 15,
-      fontWeight: '700' as const,
-      color: colors.white,
-    },
-    sendButtonTextSent: {
-      color: colors.green,
-    },
-    timeSelectorOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      justifyContent: 'flex-end',
-    },
-    overlayBg: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: colors.overlay,
-    },
-    timeSelectorSheet: {
-      backgroundColor: colors.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      padding: 20,
-      paddingBottom: 40,
-    },
-    sheetTitle: {
-      fontSize: 17,
-      fontWeight: '700' as const,
-      color: colors.textPrimary,
-      marginBottom: 16,
-      textAlign: 'center',
-    },
-    timeOption: {
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      borderRadius: 12,
-      marginBottom: 6,
-    },
-    timeOptionActive: {
-      backgroundColor: colors.goldMuted,
-    },
-    timeOptionText: {
-      fontSize: 16,
-      color: colors.textSecondary,
-      textAlign: 'center',
-      fontWeight: '500' as const,
-    },
-    timeOptionTextActive: {
-      color: colors.gold,
-      fontWeight: '700' as const,
-    },
+    container: { flex: 1, backgroundColor: colors.background },
+    scrollContent: { paddingBottom: 20 },
+    errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+    errorText: { fontSize: 16, color: colors.textMuted },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    headerBlockBtn: { padding: 6 },
+    headerTranslateBtn: { padding: 6 },
+    hero: { alignItems: 'center', paddingTop: 24, paddingBottom: 24, paddingHorizontal: 20 },
+    avatarWrapper: { position: 'relative', marginBottom: 16 },
+    avatar: { width: 110, height: 110, borderRadius: 55, backgroundColor: colors.surfaceLight, borderWidth: 3, borderColor: colors.gold },
+    onlineIndicator: { position: 'absolute', bottom: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.green, borderWidth: 3, borderColor: colors.background },
+    name: { fontSize: 26, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
+    ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+    platformRatings: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, gap: 16, borderWidth: 1, borderColor: colors.cardBorder },
+    platformRatingItem: { alignItems: 'center' },
+    platformLabel: { fontSize: 10, fontWeight: '600', color: colors.textMuted, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+    ratingValue: { fontSize: 20, fontWeight: '800', color: colors.gold },
+    noExpText: { fontSize: 14, fontWeight: '600', color: colors.orange },
+    ratingDivider: { width: 1, height: 28, backgroundColor: colors.divider },
+    skillBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 14 },
+    skillText: { fontSize: 12, fontWeight: '600' },
+    metaRow: { flexDirection: 'row', gap: 20, marginBottom: 12 },
+    metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    metaText: { fontSize: 13, color: colors.textMuted },
+    metaTextHighlight: { color: colors.blue, fontWeight: '500' },
+    languagesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+    langTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    langTagFlag: { fontSize: 12 },
+    langTagText: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+    section: { marginHorizontal: 16, marginBottom: 20 },
+    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+    sectionTitle: { fontSize: 13, fontWeight: '600', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    bioTranslateBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.cardBorder },
+    bioTranslateBtnActive: { borderColor: colors.gold + '4D', backgroundColor: colors.goldMuted },
+    bioTranslateText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
+    bioTranslateTextActive: { color: colors.gold },
+    bioCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: colors.cardBorder },
+    bioText: { fontSize: 14, color: colors.textSecondary, lineHeight: 22 },
+    statsGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    winRateRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 14, gap: 10 },
+    winRateInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    winRateLabel: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
+    winRateBarBg: { flex: 1, height: 6, backgroundColor: colors.surfaceHighlight, borderRadius: 3, overflow: 'hidden' },
+    winRateBarFill: { height: '100%', backgroundColor: colors.gold, borderRadius: 3 },
+    winRatePercent: { fontSize: 15, fontWeight: '700', color: colors.gold, minWidth: 40, textAlign: 'right' },
+    preferredTime: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface, borderRadius: 12, padding: 14 },
+    preferredTimeText: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 34, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.divider },
+    messageButton: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48, backgroundColor: colors.goldMuted, borderRadius: 12, borderWidth: 1, borderColor: colors.gold + '33' },
+    timeSelector: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 14, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.cardBorder },
+    timeSelectorText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+    sendButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.gold },
+    sendButtonSent: { backgroundColor: colors.greenMuted },
+    sendButtonText: { fontSize: 15, fontWeight: '700', color: colors.white },
+    sendButtonTextSent: { color: colors.green },
+    timeSelectorOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
+    overlayBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay },
+    timeSelectorSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+    sheetTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary, marginBottom: 16, textAlign: 'center' },
+    timeOption: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 6 },
+    timeOptionActive: { backgroundColor: colors.goldMuted },
+    timeOptionText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', fontWeight: '500' },
+    timeOptionTextActive: { color: colors.gold, fontWeight: '700' },
   });
 }
