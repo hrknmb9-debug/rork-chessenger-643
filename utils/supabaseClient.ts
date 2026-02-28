@@ -7,21 +7,11 @@ const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
 declare global {
   var _supabaseSingleton: SupabaseClient | undefined;
-  var _supabaseNoAuthSingleton: SupabaseClient | undefined;
 }
-
-const memoryStorage: Record<string, string> = {};
-const noopStorage = {
-  getItem: (key: string) => { return memoryStorage[key] ?? null; },
-  setItem: (key: string, value: string) => { memoryStorage[key] = value; },
-  removeItem: (key: string) => { delete memoryStorage[key]; },
-};
 
 if (!global._supabaseSingleton) {
   global._supabaseSingleton = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
-      // Web: storage未指定でSupabaseがlocalStorageを使う（DevToolsで確認可能）
-      // Native: AsyncStorageを明示的に指定
       ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),
       autoRefreshToken: true,
       persistSession: true,
@@ -31,25 +21,10 @@ if (!global._supabaseSingleton) {
   console.log('supabaseClient: singleton created, platform=' + Platform.OS);
 }
 
-if (!global._supabaseNoAuthSingleton) {
-  global._supabaseNoAuthSingleton = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      storage: noopStorage,
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY },
-    },
-  });
-}
-
+// Both exports point to the same singleton — one GoTrueClient, one session, all requests share the auth token automatically.
 export const supabase = global._supabaseSingleton;
-export const supabaseNoAuth = global._supabaseNoAuthSingleton;
+export const supabaseNoAuth = global._supabaseSingleton;
 
-// NOTE: 自動削除ロジックは意図せず正常トークンを消すため無効化済み
-// clearStaleSession は起動時チェックのみ。ストレージ削除は行わない。
 export async function clearStaleSession(): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -58,7 +33,6 @@ export async function clearStaleSession(): Promise<void> {
       if (error || !user) {
         console.log('clearStaleSession: stale session detected, signing out locally');
         await supabase.auth.signOut({ scope: 'local' });
-        // ストレージ削除は行わない（トークン消去ロジックを無効化）
       }
     }
   } catch (e) {
