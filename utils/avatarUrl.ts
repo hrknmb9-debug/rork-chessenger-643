@@ -10,13 +10,14 @@ export function resolveAvatarUrl(raw: string | null | undefined, name?: string):
     encodeURIComponent(initials) +
     '&size=200&background=4F46E5&color=fff&bold=true';
 
-  if (!raw) return fallback;
+  // Treat null / undefined / "" / "  " all as missing
+  if (!raw || raw.trim() === '') return fallback;
 
   // Already a full URL (http/https) — return as-is
   if (raw.startsWith('http')) return raw;
 
   // Storage path (e.g. "user-id/avatar.jpg") → direct public URL, no auth required
-  if (SUPABASE_URL) return PUBLIC_AVATAR_BASE + raw;
+  if (SUPABASE_URL) return PUBLIC_AVATAR_BASE + raw.trim();
 
   return fallback;
 }

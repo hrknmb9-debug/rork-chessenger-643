@@ -6,6 +6,7 @@ import { Match, MatchStatus, MatchRating, Player, UserProfile, TimelinePost, Tim
 import { useLocation, calculateDistance } from '@/providers/LocationProvider';
 import { Language } from '@/utils/translations';
 import { supabase, supabaseNoAuth, clearStaleSession } from '@/utils/supabaseClient';
+import { resolveAvatarUrl } from '@/utils/avatarUrl';
 import {
   calculateElo,
   notifyMatchRequest,
@@ -95,7 +96,7 @@ function supabaseProfileToPlayer(profile: SupabaseProfile, userLat?: number, use
   return {
     id: profile.id,
     name: profile.name ?? 'Unknown',
-    avatar: profile.avatar ?? 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face',
+    avatar: resolveAvatarUrl(profile.avatar, profile.name),
     rating: profile.rating ?? 0,
     chessComRating: profile.chess_com_rating ?? null,
     lichessRating: profile.lichess_rating ?? null,
@@ -374,12 +375,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
           if (profileData && !profileError) {
             console.log('ChessProvider: Loaded profile from Supabase', profileData.name);
-            const defaultAvatar = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
             setProfile({
               id: userId,
               name: profileData.name ?? '',
               email: profileData.email ?? '',
-              avatar: profileData.avatar ?? defaultAvatar,
+              avatar: resolveAvatarUrl(profileData.avatar, profileData.name),
               bio: profileData.bio ?? '',
               bioEn: '',
               rating: profileData.rating ?? 0,
@@ -602,12 +602,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .single();
 
       if (profileData && !error) {
-        const defaultAvatar = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
         setProfile({
           id: user.id,
           name: profileData.name ?? user.user_metadata?.username ?? 'Player',
           email: profileData.email ?? user.email ?? '',
-          avatar: profileData.avatar ?? defaultAvatar,
+          avatar: resolveAvatarUrl(profileData.avatar, profileData.name),
           bio: profileData.bio ?? '',
           bioEn: '',
           rating: profileData.rating ?? 0,
@@ -751,7 +750,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
               wins: newProfile.wins ?? prev.wins,
               losses: newProfile.losses ?? prev.losses,
               draws: newProfile.draws ?? prev.draws,
-              avatar: newProfile.avatar ?? prev.avatar,
+              avatar: newProfile.avatar ? resolveAvatarUrl(newProfile.avatar, newProfile.name) : prev.avatar,
             }));
           }
 
