@@ -8,6 +8,7 @@ import { ThemeColors } from '@/constants/colors';
 import { Player, PlayStyle } from '@/types';
 import { getSkillLabel, getSkillColor, getSkillBgColor, formatDistance, formatRating } from '@/utils/helpers';
 import { Language, t, getLanguageFlag } from '@/utils/translations';
+import { resolveAvatarUrl } from '@/utils/avatarUrl';
 
 interface PlayerCardProps {
   player: Player;
@@ -61,7 +62,7 @@ function PlayerCardComponent({ player, onPress, language = 'ja' }: PlayerCardPro
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: player.avatar || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(player.name) + '&size=104&background=random&color=fff&bold=true') }}
+              source={{ uri: resolveAvatarUrl(player.avatar, player.name) }}
               style={styles.avatar}
               contentFit="cover"
             />

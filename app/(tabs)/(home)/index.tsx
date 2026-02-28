@@ -31,18 +31,9 @@ import { useLocation, calculateDistance } from '@/providers/LocationProvider';
 import { PlayerCard } from '@/components/PlayerCard';
 import { t } from '@/utils/translations';
 import { supabase } from '@/utils/supabaseClient';
+import { resolveAvatarUrl } from '@/utils/avatarUrl';
 
 type TabKey = 'all' | 'nearby' | 'online';
-
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
-
-function resolveAvatarUrl(raw: string | null | undefined): string {
-  if (!raw) return DEFAULT_AVATAR;
-  if (raw.startsWith('http')) return raw;
-  // Storage path like "userId/avatar.jpg" — construct public bucket URL
-  return SUPABASE_URL + '/storage/v1/object/public/avatars/' + raw;
-}
 
 interface SupabaseProfile {
   id: string;

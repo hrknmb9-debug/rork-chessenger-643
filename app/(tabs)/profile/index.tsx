@@ -28,6 +28,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { t, getCountryFlag, getCountryName } from '@/utils/translations';
 import { PlayStyle } from '@/types';
+import { resolveAvatarUrl } from '@/utils/avatarUrl';
 
 const PLAY_STYLE_META: { key: PlayStyle; labelKey: string; emoji: string }[] = [
   { key: 'casual', labelKey: 'play_style_casual', emoji: '🎲' },
@@ -44,14 +45,6 @@ const SKILL_EMOJI: Record<string, string> = {
   expert: '👑',
 };
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
-
-function resolveAvatarUrl(raw: string | null | undefined): string {
-  if (!raw) return DEFAULT_AVATAR;
-  if (raw.startsWith('http')) return raw;
-  return SUPABASE_URL + '/storage/v1/object/public/avatars/' + raw;
-}
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
@@ -114,7 +107,7 @@ export default function ProfileScreen() {
         <View style={styles.profileInfo}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: resolveAvatarUrl(profile.avatar || user.avatar) || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.name || user.name || 'U') + '&size=200&background=random&color=fff&bold=true') }}
+              source={{ uri: resolveAvatarUrl(profile.avatar || user.avatar, profile.name || user.name) }}
               style={styles.avatar}
               contentFit="cover"
             />
