@@ -23,6 +23,12 @@ import { Message, Player } from '@/types';
 import { supabase } from '@/utils/supabaseClient';
 import { t, getTimeAgo } from '@/utils/translations';
 
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const IMG_PREFIX = '__IMG__';
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
 interface SupabaseMessage {
   id: string;
   room_id: string;
@@ -32,12 +38,27 @@ interface SupabaseMessage {
   created_at: string;
 }
 
-function decodeContent(content: string): { isImage: boolean; value: string } {
-  if (content.startsWith('__IMG__')) {
-    return { isImage: true, value: content.slice(7) };
-  }
-  return { isImage: false, value: content };
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function isImageContent(text: string | undefined | null): boolean {
+  return typeof text === 'string' && text.startsWith(IMG_PREFIX);
 }
+
+function getImageUri(text: string): string {
+  return text.slice(IMG_PREFIX.length);
+}
+
+function mapRow(m: SupabaseMessage): Message {
+  return {
+    id: m.id,
+    senderId: m.sender_id,
+    text: m.content,
+    timestamp: m.created_at,
+    read: m.is_read,
+  };
+}
+
+// ── Screen ──────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
   const { colors } = useTheme();
@@ -47,22 +68,24 @@ export default function ChatScreen() {
   const router = useRouter();
   const flatListRef = useRef<FlatList>(null);
 
+  // Track temp IDs that are awaiting DB confirmation so realtime doesn't
+  // add a duplicate entry before the insert().select() resolves.
+  const pendingTempIds = useRef<Set<string>>(new Set());
+
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState<string>('');
+  const [inputText, setInputText] = useState('');
   const [chatPlayer, setChatPlayer] = useState<Player | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
 
   const roomId = id ?? '';
-
   const isNewConversation = roomId.startsWith('new_');
   const playerIdFromNew = isNewConversation ? roomId.replace('new_', '') : null;
 
+  // ── Load history ───────────────────────────────────────────────────────────
+
   useEffect(() => {
     const loadChat = async () => {
-      if (!roomId || !currentUserId) {
-        setLoading(false);
-        return;
-      }
+      if (!roomId || !currentUserId) { setLoading(false); return; }
 
       try {
         if (isNewConversation && playerIdFromNew) {
@@ -80,29 +103,25 @@ export default function ChatScreen() {
           setChatPlayer(player);
         }
 
-        const { data: messagesData, error } = await supabase
+        const { data, error } = await supabase
           .from('messages')
           .select('*')
           .eq('room_id', roomId)
           .order('created_at', { ascending: true });
 
-        if (messagesData && !error) {
-          const mapped: Message[] = messagesData.map((m: SupabaseMessage) => ({
-            id: m.id,
-            senderId: m.sender_id,
-            text: m.content,
-            timestamp: m.created_at,
-            read: m.is_read,
-          }));
-          setMessages(mapped);
-          console.log('Chat: Loaded', mapped.length, 'messages for room', roomId);
+        if (data && !error) {
+          setMessages(data.map(mapRow));
+          console.log('Chat: Loaded', data.length, 'messages for room', roomId);
 
+          // Mark incoming messages as read
           await supabase
             .from('messages')
             .update({ is_read: true })
             .eq('room_id', roomId)
             .neq('sender_id', currentUserId)
             .eq('is_read', false);
+        } else if (error) {
+          console.log('Chat: Load error', error.message);
         }
       } catch (e) {
         console.log('Chat: Failed to load messages', e);
@@ -114,56 +133,87 @@ export default function ChatScreen() {
     loadChat();
   }, [roomId, currentUserId, isNewConversation, playerIdFromNew, fetchPlayerProfile]);
 
+  // ── Realtime subscription ──────────────────────────────────────────────────
+
   useEffect(() => {
     if (!roomId || isNewConversation) return;
 
+    // Use a unique channel name to avoid conflicts with messages/[id].tsx
+    const channelName = `chat_screen_${roomId}`;
+    console.log('Chat: Subscribing to channel', channelName);
+
     const channel = supabase
-      .channel(`chat-${roomId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `room_id=eq.${roomId}`,
-      }, async (payload) => {
-        const msg = payload.new as SupabaseMessage;
-        console.log('Chat: Realtime message received', msg.id);
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${roomId}`,
+        },
+        async (payload) => {
+          const msg = payload.new as SupabaseMessage;
+          console.log(
+            'Chat: Realtime INSERT →',
+            msg.id,
+            '| sender:', msg.sender_id,
+            '| content[:30]:', msg.content?.slice(0, 30),
+            '| isImg:', msg.content?.startsWith(IMG_PREFIX),
+          );
 
-        const newMsg: Message = {
-          id: msg.id,
-          senderId: msg.sender_id,
-          text: msg.content,
-          timestamp: msg.created_at,
-          read: msg.is_read,
-        };
+          const newMsg = mapRow(msg);
 
-        setMessages(prev => {
-          if (prev.some(m => m.id === newMsg.id)) return prev;
-          return [...prev, newMsg];
-        });
+          setMessages(prev => {
+            // 1. Already present by exact id
+            if (prev.some(m => m.id === newMsg.id)) return prev;
 
-        if (msg.sender_id !== currentUserId) {
-          await supabase
-            .from('messages')
-            .update({ is_read: true })
-            .eq('id', msg.id);
-        }
+            // 2. Own message: replace the temp placeholder that is still pending
+            if (msg.sender_id === currentUserId && pendingTempIds.current.size > 0) {
+              const tempIdx = prev.findIndex(
+                m => pendingTempIds.current.has(m.id) && m.text === newMsg.text
+              );
+              if (tempIdx !== -1) {
+                const updated = [...prev];
+                const tempId = updated[tempIdx].id;
+                updated[tempIdx] = { ...updated[tempIdx], id: newMsg.id };
+                pendingTempIds.current.delete(tempId);
+                return updated;
+              }
+            }
 
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      })
+            // 3. New incoming message
+            return [...prev, newMsg];
+          });
+
+          // Mark incoming messages as read immediately
+          if (msg.sender_id !== currentUserId) {
+            await supabase
+              .from('messages')
+              .update({ is_read: true })
+              .eq('id', msg.id);
+          }
+
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        },
+      )
       .subscribe((status, err) => {
         if (err) {
-          console.log('Chat: Realtime subscribe error', err);
+          console.log('Chat: Realtime subscribe ERROR', err);
         } else {
-          console.log('Chat: Realtime subscribe status', status);
+          console.log('Chat: Realtime status →', status);
         }
       });
 
     return () => {
+      console.log('Chat: Removing channel', channelName);
       supabase.removeChannel(channel);
     };
   }, [roomId, currentUserId, isNewConversation]);
+
+  // ── Room ID helpers ────────────────────────────────────────────────────────
 
   const getActualRoomId = useCallback((): string => {
     if (!isNewConversation) return roomId;
@@ -173,48 +223,55 @@ export default function ChatScreen() {
     return roomId;
   }, [roomId, isNewConversation, playerIdFromNew, currentUserId]);
 
+  // ── Send logic ─────────────────────────────────────────────────────────────
+
   const sendContent = useCallback(async (content: string) => {
     if (!currentUserId) return;
     const actualRoomId = getActualRoomId();
 
     const tempId = `msg_temp_${Date.now()}`;
-    const tempMessage: Message = {
+    const tempMsg: Message = {
       id: tempId,
       senderId: currentUserId,
       text: content,
       timestamp: new Date().toISOString(),
       read: true,
     };
-    setMessages(prev => [...prev, tempMessage]);
+
+    pendingTempIds.current.add(tempId);
+    setMessages(prev => [...prev, tempMsg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
-      const { data, error } = await supabase.from('messages').insert({
-        room_id: actualRoomId,
-        sender_id: currentUserId,
-        content,
-        is_read: false,
-      }).select().single();
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({ room_id: actualRoomId, sender_id: currentUserId, content, is_read: false })
+        .select()
+        .single();
 
       if (data && !error) {
+        // Replace temp placeholder with confirmed DB id (if not already replaced by realtime)
+        pendingTempIds.current.delete(tempId);
         setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id } : m));
       } else if (error) {
-        console.log('Chat: Message send error', error.message);
+        pendingTempIds.current.delete(tempId);
+        console.log('Chat: Send error', error.message);
       }
     } catch (e) {
-      console.log('Chat: Message send failed', e);
+      pendingTempIds.current.delete(tempId);
+      console.log('Chat: Send failed', e);
     }
   }, [currentUserId, getActualRoomId]);
 
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || !currentUserId) return;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
     const text = inputText.trim();
+    if (!text || !currentUserId) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setInputText('');
     await sendContent(text);
   }, [inputText, currentUserId, sendContent]);
+
+  // ── Image picker ───────────────────────────────────────────────────────────
 
   const handlePickImage = useCallback(async () => {
     if (Platform.OS !== 'web') {
@@ -232,18 +289,21 @@ export default function ChatScreen() {
         aspect: [4, 3],
       });
       if (!result.canceled && result.assets[0]) {
-        const uri = result.assets[0].uri;
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await sendContent(`__IMG__${uri}`);
+        await sendContent(`${IMG_PREFIX}${result.assets[0].uri}`);
       }
     } catch (e) {
       console.log('Chat: Image pick failed', e);
     }
   }, [sendContent]);
 
+  // ── Render message ─────────────────────────────────────────────────────────
+
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === currentUserId;
-    const { isImage, value } = decodeContent(item.text);
+    const isImg = isImageContent(item.text);
+    const imgUri = isImg ? getImageUri(item.text) : null;
+
     return (
       <View
         style={[
@@ -258,18 +318,20 @@ export default function ChatScreen() {
             contentFit="cover"
           />
         )}
+
         <View
           style={[
             styles.messageBubble,
             isMe ? styles.messageBubbleMe : styles.messageBubbleOther,
-            isImage && styles.messageBubbleImage,
+            isImg && styles.messageBubbleImage,
           ]}
         >
-          {isImage ? (
+          {isImg && imgUri ? (
             <Image
-              source={{ uri: value }}
+              source={{ uri: imgUri }}
               style={styles.imageMessage}
               contentFit="cover"
+              onError={(e) => console.log('Chat: Image render error', e.error)}
             />
           ) : (
             <Text
@@ -281,6 +343,7 @@ export default function ChatScreen() {
               {item.text}
             </Text>
           )}
+
           <Text
             style={[
               styles.messageTime,
@@ -294,11 +357,13 @@ export default function ChatScreen() {
     );
   }, [chatPlayer, language, styles, currentUserId]);
 
+  // ── Loading ────────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: t('chat', language) }} />
-        <View style={styles.notFound}>
+        <Stack.Screen options={{ title: '' }} />
+        <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.gold} />
         </View>
       </View>
@@ -308,13 +373,15 @@ export default function ChatScreen() {
   if (!chatPlayer) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: t('chat', language) }} />
-        <View style={styles.notFound}>
+        <Stack.Screen options={{ title: '' }} />
+        <View style={styles.center}>
           <Text style={styles.notFoundText}>{t('conversation_not_found', language)}</Text>
         </View>
       </View>
     );
   }
+
+  // ── Main render ────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
@@ -334,9 +401,7 @@ export default function ChatScreen() {
               />
               <View>
                 <Text style={styles.headerName}>{chatPlayer.name}</Text>
-                <Text style={styles.headerStatus}>
-                  オンライン
-                </Text>
+                <Text style={styles.headerStatus}>オンライン</Text>
               </View>
             </Pressable>
           ),
@@ -356,12 +421,22 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={[styles.notFoundText, { fontSize: 14 }]}>
+                メッセージを送ってみましょう
+              </Text>
+            </View>
+          }
         />
 
         <View style={styles.inputBar}>
           <Pressable
             onPress={handlePickImage}
-            style={[styles.mediaBtn, { backgroundColor: colors.goldMuted, borderWidth: 1.5, borderColor: colors.gold }]}
+            style={[
+              styles.mediaBtn,
+              { backgroundColor: colors.goldMuted, borderWidth: 1.5, borderColor: colors.gold },
+            ]}
           >
             <ImageIcon size={22} color={colors.gold} />
           </Pressable>
@@ -374,13 +449,12 @@ export default function ChatScreen() {
             onChangeText={setInputText}
             multiline
             maxLength={500}
-            testID="chat-input"
           />
+
           <Pressable
             onPress={handleSend}
             style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
             disabled={!inputText.trim()}
-            testID="send-button"
           >
             <Send size={18} color={inputText.trim() ? colors.white : colors.textMuted} />
           </Pressable>
@@ -390,6 +464,8 @@ export default function ChatScreen() {
   );
 }
 
+// ── Styles ───────────────────────────────────────────────────────────────────
+
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: {
@@ -398,6 +474,16 @@ function createStyles(colors: ThemeColors) {
     },
     keyboardView: {
       flex: 1,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    notFoundText: {
+      fontSize: 16,
+      color: colors.textMuted,
     },
     headerTitle: {
       flexDirection: 'row',
@@ -478,7 +564,7 @@ function createStyles(colors: ThemeColors) {
       marginTop: 4,
     },
     messageTimeMe: {
-      color: 'rgba(255, 255, 255, 0.6)',
+      color: 'rgba(255,255,255,0.6)',
       textAlign: 'right' as const,
     },
     messageTimeOther: {
@@ -522,15 +608,6 @@ function createStyles(colors: ThemeColors) {
     },
     sendButtonDisabled: {
       backgroundColor: colors.surfaceLight,
-    },
-    notFound: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    notFoundText: {
-      fontSize: 16,
-      color: colors.textMuted,
     },
   });
 }
