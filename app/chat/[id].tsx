@@ -9,11 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Send } from 'lucide-react-native';
+import { Send, Image as ImageIcon } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
@@ -158,50 +160,73 @@ export default function ChatScreen() {
     return roomId;
   }, [roomId, isNewConversation, playerIdFromNew, currentUserId]);
 
-  const handleSend = useCallback(async () => {
-    if (!inputText.trim() || !currentUserId) return;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
+  const sendContent = useCallback(async (content: string) => {
+    if (!currentUserId) return;
     const actualRoomId = getActualRoomId();
-    const text = inputText.trim();
-    setInputText('');
 
     const tempId = `msg_temp_${Date.now()}`;
     const tempMessage: Message = {
       id: tempId,
       senderId: currentUserId,
-      text,
+      text: content,
       timestamp: new Date().toISOString(),
       read: true,
     };
     setMessages(prev => [...prev, tempMessage]);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
       const { data, error } = await supabase.from('messages').insert({
         room_id: actualRoomId,
         sender_id: currentUserId,
-        content: text,
+        content,
         is_read: false,
       }).select().single();
 
       if (data && !error) {
-        setMessages(prev =>
-          prev.map(m => m.id === tempId ? { ...m, id: data.id } : m)
-        );
-        console.log('Chat: Message sent and synced', data.id);
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id } : m));
       } else if (error) {
         console.log('Chat: Message send error', error.message);
       }
     } catch (e) {
       console.log('Chat: Message send failed', e);
     }
-  }, [inputText, currentUserId, getActualRoomId]);
+  }, [currentUserId, getActualRoomId]);
+
+  const handleSend = useCallback(async () => {
+    if (!inputText.trim() || !currentUserId) return;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    const text = inputText.trim();
+    setInputText('');
+    await sendContent(text);
+  }, [inputText, currentUserId, sendContent]);
+
+  const handlePickImage = useCallback(async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('アクセス許可が必要です', 'フォトライブラリへのアクセスを許可してください。');
+        return;
+      }
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await sendContent(`__IMG__${uri}`);
+      }
+    } catch (e) {
+      console.log('Chat: Image pick failed', e);
+    }
+  }, [sendContent]);
 
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === currentUserId;
@@ -287,7 +312,7 @@ export default function ChatScreen() {
               <View>
                 <Text style={styles.headerName}>{chatPlayer.name}</Text>
                 <Text style={styles.headerStatus}>
-                  {chatPlayer.isOnline ? t('online', language) : chatPlayer.lastActive}
+                  オンライン
                 </Text>
               </View>
             </Pressable>
@@ -311,6 +336,13 @@ export default function ChatScreen() {
         />
 
         <View style={styles.inputBar}>
+          <Pressable
+            onPress={handlePickImage}
+            style={[styles.mediaBtn, { backgroundColor: colors.goldMuted, borderWidth: 1.5, borderColor: colors.gold }]}
+          >
+            <ImageIcon size={22} color={colors.gold} />
+          </Pressable>
+
           <TextInput
             style={styles.input}
             placeholder={t('type_message', language)}
@@ -430,6 +462,13 @@ function createStyles(colors: ThemeColors) {
       borderTopWidth: 1,
       borderTopColor: colors.divider,
       backgroundColor: colors.background,
+    },
+    mediaBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     input: {
       flex: 1,
