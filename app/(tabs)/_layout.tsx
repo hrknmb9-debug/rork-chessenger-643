@@ -131,10 +131,9 @@ export default function TabLayout() {
         name="messages"
         options={{
           title: t('tab_messages', language),
+          tabBarBadge: unreadMessageCount > 0 ? unreadMessageCount : undefined,
           tabBarIcon: ({ color, size }) => (
-            <BadgeIcon count={unreadMessageCount} colors={colors}>
-              <MessageCircle size={size} color={color} />
-            </BadgeIcon>
+            <MessageCircle size={size} color={color} />
           ),
         }}
       />

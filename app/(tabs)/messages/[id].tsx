@@ -590,11 +590,11 @@ export default function ChatScreen() {
               </View>
               <View>
                 <Text style={styles.headerName}>{chatPlayer.name}</Text>
-                <Text style={[styles.headerStatus, chatPlayer.isOnline && { color: '#22C55E' }]}>
-                  {chatPlayer.isOnline
-                    ? t('online', language)
-                    : `最終ログイン ${getTimeAgo(chatPlayer.lastSeen ?? chatPlayer.lastActive, language)}`}
-                </Text>
+                {chatPlayer.isOnline && (
+                  <Text style={[styles.headerStatus, { color: '#22C55E' }]}>
+                    {t('online', language)}
+                  </Text>
+                )}
               </View>
             </Pressable>
           ),
@@ -627,9 +627,9 @@ export default function ChatScreen() {
         <View style={[styles.inputBar, { borderTopColor: colors.divider }]}>
           <Pressable
             onPress={handlePickImage}
-            style={[styles.mediaBtn, { backgroundColor: colors.surfaceLight, borderWidth: 1, borderColor: colors.divider }]}
+            style={[styles.mediaBtn, { backgroundColor: colors.goldMuted, borderWidth: 1.5, borderColor: colors.gold }]}
           >
-            <ImageIcon size={20} color={colors.textSecondary} />
+            <ImageIcon size={22} color={colors.gold} />
           </Pressable>
 
           <TextInput
