@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import { ArrowLeft, Navigation } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
@@ -83,7 +84,7 @@ export default function MapScreen() {
                 onPress={() => handlePlayerPress(player)}
                 style={styles.playerListItem}
               >
-                <Image source={{ uri: player.avatar }} style={styles.playerAvatar} contentFit="cover" />
+                <SafeImage uri={player.avatar} name={player.name} style={styles.playerAvatar} contentFit="cover" />
                 <View style={styles.playerInfo}>
                   <Text style={styles.playerName}>{player.name}</Text>
                   <Text style={styles.playerLocation}>{player.location + ' · ' + player.distance + 'km'}</Text>
@@ -123,7 +124,7 @@ export default function MapScreen() {
           >
             <View style={styles.markerContainer}>
               <View style={[styles.markerBorder, { borderColor: getSkillColor(player.skillLevel, colors) }]}>
-                <Image source={{ uri: player.avatar }} style={styles.markerAvatar} contentFit="cover" />
+                <SafeImage uri={player.avatar} name={player.name} style={styles.markerAvatar} contentFit="cover" />
               </View>
               {player.isOnline && <View style={styles.markerOnline} />}
               <View style={styles.markerLabel}>

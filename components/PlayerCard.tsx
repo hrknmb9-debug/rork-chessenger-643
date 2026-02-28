@@ -8,7 +8,7 @@ import { ThemeColors } from '@/constants/colors';
 import { Player, PlayStyle } from '@/types';
 import { getSkillLabel, getSkillColor, getSkillBgColor, formatDistance, formatRating } from '@/utils/helpers';
 import { Language, t, getLanguageFlag } from '@/utils/translations';
-import { resolveAvatarUrl } from '@/utils/avatarUrl';
+import { SafeImage } from '@/components/SafeImage';
 
 interface PlayerCardProps {
   player: Player;
@@ -61,11 +61,7 @@ function PlayerCardComponent({ player, onPress, language = 'ja' }: PlayerCardPro
       >
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            <Image
-              source={{ uri: resolveAvatarUrl(player.avatar, player.name) }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
+            <SafeImage uri={player.avatar} name={player.name} style={styles.avatar} contentFit="cover" />
             {player.isOnline && <View style={styles.onlineIndicator} />}
           </View>
           <View style={styles.info}>

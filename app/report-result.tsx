@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import * as Haptics from 'expo-haptics';
 import { X, Trophy, Minus, ChevronRight } from 'lucide-react-native';
 import { ThemeColors } from '@/constants/colors';
@@ -94,7 +95,7 @@ export default function ReportResultScreen() {
 
       <View style={styles.content}>
         <View style={styles.matchInfo}>
-          <Image source={{ uri: match.opponent.avatar }} style={styles.avatar} contentFit="cover" />
+          <SafeImage uri={match.opponent.avatar} name={match.opponent.name} style={styles.avatar} contentFit="cover" />
           <Text style={styles.vsText}>vs</Text>
           <Text style={styles.opponentName}>{match.opponent.name}</Text>
           <Text style={styles.timeControl}>{match.timeControl}</Text>

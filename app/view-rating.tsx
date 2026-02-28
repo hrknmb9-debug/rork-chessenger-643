@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import { Star, X, Trophy, Minus, ThumbsUp, Target, Clock, Edit3 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
@@ -86,7 +87,7 @@ export default function ViewRatingScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.opponentSection}>
-          <Image source={{ uri: match.opponent.avatar }} style={styles.avatar} contentFit="cover" />
+          <SafeImage uri={match.opponent.avatar} name={match.opponent.name} style={styles.avatar} contentFit="cover" />
           <Text style={styles.opponentName}>{match.opponent.name}</Text>
           <View style={styles.resultBadge}>
             {match.result === 'win' && <Trophy size={14} color={colors.green} />}

@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -61,7 +62,7 @@ function CommentItem({
   return (
     <View>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Image source={{ uri: comment.author.avatar }} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceLight }} contentFit="cover" />
+        <SafeImage uri={comment.author.avatar} name={comment.author.name} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceLight }} contentFit="cover" />
         <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: '600' as const, color: colors.textPrimary, marginBottom: 2 }}>{comment.author.name}</Text>
           <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>{language === 'en' && comment.contentEn ? comment.contentEn : comment.content}</Text>
@@ -75,7 +76,7 @@ function CommentItem({
           {comment.replies.map(reply => (
             <View key={reply.id} style={{ flexDirection: 'row', gap: 6 }}>
               <CornerDownRight size={12} color={colors.textMuted} style={{ marginTop: 8 }} />
-              <Image source={{ uri: reply.author.avatar }} style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceLight }} contentFit="cover" />
+              <SafeImage uri={reply.author.avatar} name={reply.author.name} style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceLight }} contentFit="cover" />
               <View style={{ flex: 1, backgroundColor: colors.surfaceLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                 <Text style={{ fontSize: 11, fontWeight: '600' as const, color: colors.textPrimary }}>{reply.author.name}</Text>
                 <Text style={{ fontSize: 12, color: colors.textSecondary }}>{reply.content}</Text>
@@ -181,7 +182,7 @@ function PostCard({
     <View style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.cardBorder }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <Pressable onPress={() => onAuthorPress(post.author.id)} style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Image source={{ uri: post.author.avatar }} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceLight }} contentFit="cover" />
+          <SafeImage uri={post.author.avatar} name={post.author.name} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceLight }} contentFit="cover" />
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text style={{ fontSize: 15, fontWeight: '600' as const, color: colors.textPrimary }}>{post.author.name}</Text>
             <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{getTimeAgo(post.createdAt, language)}</Text>

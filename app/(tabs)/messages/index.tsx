@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import { useRouter } from 'expo-router';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Search, MessageCircle, Trash2, CheckCheck, ShieldOff } from 'lucide-react-native';
@@ -104,8 +105,9 @@ function SwipeableConversation({
       >
         {/* Avatar */}
         <View style={styles.avatarWrapper}>
-          <Image
-            source={{ uri: item.player.avatar }}
+          <SafeImage
+            uri={item.player.avatar}
+            name={item.player.name}
             style={styles.avatar}
             contentFit="cover"
           />

@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import { useRouter } from 'expo-router';
 import {
   Search,
@@ -128,7 +129,7 @@ function OnlineStrip({
               style={[strip.item, { borderColor: colors.cardBorder }]}
             >
               <View style={strip.avatarWrap}>
-                <Image source={{ uri: player.avatar }} style={strip.avatar} contentFit="cover" />
+                <SafeImage uri={player.avatar} name={player.name} style={strip.avatar} contentFit="cover" />
                 <View style={[strip.onlineBadge, { backgroundColor: '#22C55E', borderColor: colors.card }]} />
               </View>
               <Text style={[strip.name, { color: colors.textPrimary }]} numberOfLines={1}>

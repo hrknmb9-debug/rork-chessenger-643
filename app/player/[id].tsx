@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import {
   MapPin,
   Clock,
@@ -162,7 +163,7 @@ export default function PlayerDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.avatarWrapper}>
-            <Image source={{ uri: player.avatar }} style={styles.avatar} contentFit="cover" />
+            <SafeImage uri={player.avatar} name={player.name} style={styles.avatar} contentFit="cover" />
             {player.isOnline ? <View style={styles.onlineIndicator} /> : null}
           </View>
 

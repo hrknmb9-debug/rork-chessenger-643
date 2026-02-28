@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { SafeImage } from '@/components/SafeImage';
 import { Send, Image as ImageIcon, Check, CheckCheck } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -258,7 +259,7 @@ function MessageBubble({
       {/* Avatar column — other user only */}
       {!isMe && (
         isFirst && chatPlayer
-          ? <Image source={{ uri: chatPlayer.avatar }} style={styles.bubbleAvatar} contentFit="cover" />
+          ? <SafeImage uri={chatPlayer.avatar} name={chatPlayer.name} style={styles.bubbleAvatar} contentFit="cover" />
           : <View style={styles.avatarSpacer} />
       )}
 
@@ -581,8 +582,9 @@ export default function ChatScreen() {
               style={styles.headerTitle}
             >
               <View style={styles.headerAvatarWrapper}>
-                <Image
-                  source={{ uri: chatPlayer.avatar }}
+                <SafeImage
+                  uri={chatPlayer.avatar}
+                  name={chatPlayer.name}
                   style={styles.headerAvatar}
                   contentFit="cover"
                 />
