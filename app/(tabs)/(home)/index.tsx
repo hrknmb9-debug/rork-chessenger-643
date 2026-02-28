@@ -159,7 +159,7 @@ const strip = StyleSheet.create({
 export default function HomeScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { language, unreadNotificationCount } = useChess();
+  const { language, unreadNotificationCount, currentUserId } = useChess();
   const { userLocation, isLoading: locationLoading, toggleLocationEnabled } = useLocation();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -169,7 +169,11 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchPlayers = useCallback(async () => {
-    const { data, error } = await supabase.from('profiles').select('*');
+    let query = supabase.from('profiles').select('*');
+    if (currentUserId) {
+      query = query.neq('id', currentUserId);
+    }
+    const { data, error } = await query;
     if (error) {
       console.log('fetchPlayers error:', error.message);
       return;
@@ -180,7 +184,7 @@ export default function HomeScreen() {
       const mapped = (data as SupabaseProfile[]).map(p => mapProfile(p, userLat, userLon));
       setPlayers(mapped);
     }
-  }, [userLocation]);
+  }, [userLocation, currentUserId]);
 
   useEffect(() => {
     setLoading(true);
