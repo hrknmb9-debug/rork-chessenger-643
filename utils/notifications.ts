@@ -1,63 +1,10 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import { supabase, supabaseNoAuth } from '@/utils/supabaseClient';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
+// expo-notifications / expo-device は package.json から除外済みのため無効化
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    console.log('Notifications: Web platform, skipping push registration');
-    return null;
-  }
-
-  if (!Device.isDevice) {
-    console.log('Notifications: Not a physical device, skipping');
-    return null;
-  }
-
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      console.log('Notifications: Permission not granted');
-      return null;
-    }
-
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: '30e8dzkl5ptrsftnsy7by',
-    });
-    const token = tokenData.data;
-    console.log('Notifications: Push token obtained:', token);
-
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#4ADE80',
-      });
-    }
-
-    return token;
-  } catch (error) {
-    console.log('Notifications: Registration failed', error);
-    return null;
-  }
+  console.log('Notifications: expo-notifications disabled');
+  return null;
 }
 
 export async function savePushTokenToSupabase(token: string): Promise<void> {
