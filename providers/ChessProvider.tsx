@@ -322,12 +322,27 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         const participants = allEventParticipants
           .filter(ep => ep.event_id === (rawEvent.id as string))
           .map(ep => ep.user_id);
+
+        let date = (rawEvent.date as string) ?? '';
+        let time = (rawEvent.time as string) ?? '';
+        const eventAt = rawEvent.event_at as string | null | undefined;
+        if ((!date || !time) && eventAt) {
+          const d = new Date(eventAt);
+          if (!Number.isNaN(d.getTime())) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            date = `${y}-${m}-${day}`;
+            time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          }
+        }
+
         event = {
           id: rawEvent.id as string,
           userId: post.user_id,
           title: (rawEvent.title as string) ?? post.content,
-          date: (rawEvent.date as string) ?? '',
-          time: (rawEvent.time as string) ?? '',
+          date,
+          time,
           location: (rawEvent.location as string) ?? '',
           maxParticipants: (rawEvent.max_participants as number) ?? 10,
           participants,
