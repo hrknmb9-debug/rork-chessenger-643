@@ -143,7 +143,7 @@ export interface MatchResultReport {
 
 export interface AppNotification {
   id: string;
-  type: 'match_request' | 'match_accepted' | 'match_declined' | 'result_report' | 'result_confirmed' | 'blocked';
+  type: 'match_request' | 'match_accepted' | 'match_declined' | 'result_report' | 'result_confirmed' | 'blocked' | 'new_message';
   title: string;
   message: string;
   createdAt: string;

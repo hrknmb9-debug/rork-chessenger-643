@@ -161,7 +161,7 @@ const strip = StyleSheet.create({
 export default function HomeScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { language, unreadNotificationCount, currentUserId } = useChess();
+  const { language, unreadNotificationCount, currentUserId, unreadCountByUserId } = useChess();
   const { userLocation, isLoading: locationLoading, toggleLocationEnabled } = useLocation();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -254,6 +254,7 @@ export default function HomeScreen() {
             player={item}
             onPress={() => router.push(('/player/' + item.id) as any)}
             onMessagePress={() => router.push(('/messages/new_' + item.id) as any)}
+            unreadCount={unreadCountByUserId[item.id] ?? 0}
             language={language}
           />
         )}

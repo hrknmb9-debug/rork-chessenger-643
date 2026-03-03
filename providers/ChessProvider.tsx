@@ -159,6 +159,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeUsersCount, setActiveUsersCount] = useState<number>(0);
   const [authReady, setAuthReady] = useState<boolean>(false);
+  const [unreadCountByUserId, setUnreadCountByUserId] = useState<Record<string, number>>({});
   const { userLocation, getDistanceToPlayer } = useLocation();
   const lastSeenInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const profileCacheRef = useRef<Map<string, Player>>(new Map());
@@ -654,11 +655,71 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     };
   }, [currentUserId]);
 
+  const fetchUnreadCountByUser = useCallback(async (uid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('room_id, sender_id')
+        .ilike('room_id', `%${uid}%`)
+        .neq('sender_id', uid)
+        .eq('is_read', false);
+
+      if (error || !data) return {};
+      const byOther: Record<string, number> = {};
+      data.forEach((row: { room_id: string; sender_id: string }) => {
+        const parts = row.room_id.split('_');
+        const otherId = parts.find(p => p !== uid);
+        if (otherId) {
+          byOther[otherId] = (byOther[otherId] ?? 0) + 1;
+        }
+      });
+      return byOther;
+    } catch (e) {
+      console.log('fetchUnreadCountByUser failed', e);
+      return {};
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId || currentUserId === 'me') {
+      setUnreadCountByUserId({});
+      return;
+    }
+    let mounted = true;
+    const run = async () => {
+      const byUser = await fetchUnreadCountByUser(currentUserId);
+      if (mounted) setUnreadCountByUserId(byUser);
+    };
+    run();
+    return () => { mounted = false; };
+  }, [currentUserId, fetchUnreadCountByUser]);
+
   useEffect(() => {
     const messagesChannel = supabase
       .channel('messages-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        console.log('Realtime: Message change received', payload.eventType);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+        const msg = payload.new as { room_id: string; sender_id: string; content: string };
+        if (!currentUserId || msg.sender_id === currentUserId) return;
+        if (!msg.room_id.includes(currentUserId)) return;
+        setUnreadCountByUserId(prev => ({ ...prev, [msg.sender_id]: (prev[msg.sender_id] ?? 0) + 1 }));
+        try {
+          const sender = await fetchPlayerProfile(msg.sender_id);
+          const preview = (msg.content || '').startsWith('__IMG__') ? '📷 画像' : (msg.content || '').substring(0, 60);
+          const content = sender ? `${sender.name}: ${preview}` : `New message: ${preview}`;
+          await supabase.from('notifications').insert({
+            user_id: currentUserId,
+            type: 'new_message',
+            content,
+            related_id: msg.room_id,
+          });
+        } catch (e) {
+          console.log('Insert message notification failed', e);
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, async () => {
+        if (!currentUserId) return;
+        const byUser = await fetchUnreadCountByUser(currentUserId);
+        setUnreadCountByUserId(byUser);
       })
       .subscribe((status) => {
         console.log('Realtime: Messages subscription status:', status);
@@ -804,7 +865,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       supabase.removeChannel(profilesChannel);
       if (notificationsChannel) supabase.removeChannel(notificationsChannel);
     };
-  }, [userLocation, currentUserId]);
+  }, [userLocation, currentUserId, fetchPlayerProfile, fetchUnreadCountByUser]);
 
   const players = useMemo(() => {
     return supabasePlayers.filter(p => !blockedUsers.includes(p.id));
@@ -1641,5 +1702,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     joinEvent,
     leaveEvent,
     fetchPlayerProfile,
+    unreadCountByUserId,
   };
 });

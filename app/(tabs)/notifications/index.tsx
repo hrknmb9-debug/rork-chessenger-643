@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Bell, Clock, Swords, CheckCircle2, XCircle, AlertCircle } from 'lucide-react-native';
+import { Bell, Clock, Swords, CheckCircle2, XCircle, AlertCircle, MessageCircle } from 'lucide-react-native';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { ThemeColors } from '@/constants/colors';
@@ -19,8 +19,12 @@ export default function NotificationsScreen() {
     if (!item.read) {
       markNotificationRead(item.id);
     }
-    if (item.relatedId && item.type === 'match_request') {
-      router.push(('/matches' as any));
+    if (item.relatedId) {
+      if (item.type === 'match_request') {
+        router.push(('/matches' as any));
+      } else if (item.type === 'new_message') {
+        router.push(('/messages/' + item.relatedId) as any);
+      }
     }
   };
 
@@ -87,6 +91,8 @@ function renderIcon(item: AppNotification, colors: ThemeColors) {
       return <CheckCircle2 size={20} color={colors.green} />;
     case 'match_declined':
       return <XCircle size={20} color={colors.red} />;
+    case 'new_message':
+      return <MessageCircle size={20} color={colors.blue} />;
     case 'result_report':
     case 'result_confirmed':
       return <AlertCircle size={20} color={colors.orange} />;

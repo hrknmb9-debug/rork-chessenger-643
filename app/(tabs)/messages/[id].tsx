@@ -625,37 +625,39 @@ export default function ChatScreen() {
           }
         />
 
-        {/* Input bar */}
-        <View style={[styles.inputBar, { borderTopColor: colors.divider }]}>
-          <Pressable
-            onPress={handlePickImage}
-            style={[styles.mediaBtn, { backgroundColor: colors.goldMuted, borderWidth: 1.5, borderColor: colors.gold }]}
-          >
-            <ImageIcon size={22} color={colors.gold} />
-          </Pressable>
+        {/* Input bar — glassmorphism */}
+        <View style={[styles.inputBarWrap, { backgroundColor: colors.background }]}>
+          <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.cardBorder }]}>
+            <Pressable
+              onPress={handlePickImage}
+              style={[styles.mediaBtn, { backgroundColor: colors.goldMuted, borderColor: colors.gold }]}
+            >
+              <ImageIcon size={22} color={colors.gold} />
+            </Pressable>
 
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary, borderColor: colors.divider }]}
-            placeholder={t('type_message', language)}
-            placeholderTextColor={colors.textMuted}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-          />
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.surfaceLight, color: colors.textPrimary, borderColor: colors.divider }]}
+              placeholder={t('type_message', language)}
+              placeholderTextColor={colors.textMuted}
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={1000}
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+            />
 
-          <Pressable
-            onPress={handleSend}
-            style={[
-              styles.sendBtn,
-              { backgroundColor: inputText.trim() ? colors.gold : colors.surfaceLight },
-            ]}
-            disabled={!inputText.trim()}
-          >
-            <Send size={18} color={inputText.trim() ? colors.white : colors.textMuted} />
-          </Pressable>
+            <Pressable
+              onPress={handleSend}
+              style={[
+                styles.sendBtn,
+                { backgroundColor: inputText.trim() ? colors.gold : colors.surfaceHighlight },
+              ]}
+              disabled={!inputText.trim()}
+            >
+              <Send size={20} color={inputText.trim() ? colors.white : colors.textMuted} />
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -784,17 +786,21 @@ function createStyles(colors: ThemeColors) {
       marginBottom: 2,
     },
     bubble: {
-      paddingHorizontal: 16,
-      paddingVertical: 11,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+      elevation: 2,
     },
     bubbleMe: {
       backgroundColor: colors.gold,
     },
-    // Other-user bubbles get a subtle border so they stand out on white backgrounds
     bubbleOther: {
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.divider,
+      borderColor: colors.cardBorder,
     },
     bubbleText: {
       fontSize: 15,
@@ -852,38 +858,51 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12,
       fontWeight: '600' as const,
     },
-    // Input bar
+    // Input bar — glassmorphism / modern
+    inputBarWrap: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.divider,
+    },
     inputBar: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      paddingBottom: Platform.OS === 'ios' ? 14 : 10,
-      gap: 8,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      backgroundColor: colors.background,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+      gap: 10,
+      borderRadius: 24,
+      borderWidth: 1,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
     },
     mediaBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
+      borderWidth: 1.5,
     },
     input: {
       flex: 1,
-      borderRadius: 22,
+      borderRadius: 20,
       borderWidth: 1,
-      paddingHorizontal: 16,
-      paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+      paddingHorizontal: 18,
+      paddingVertical: Platform.OS === 'ios' ? 12 : 10,
       fontSize: 15,
       maxHeight: 120,
-      minHeight: 42,
+      minHeight: 44,
     },
     sendBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
     },

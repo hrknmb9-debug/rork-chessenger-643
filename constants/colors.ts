@@ -25,6 +25,7 @@ export interface ThemeColors {
   overlay: string;
   tabBar: string;
   tabBarBorder: string;
+  inputBg?: string;
 }
 
 export const LightTheme: ThemeColors = {
@@ -54,6 +55,7 @@ export const LightTheme: ThemeColors = {
   overlay: 'rgba(0, 0, 0, 0.35)',
   tabBar: '#FFFFFF',
   tabBarBorder: '#D4E2D4',
+  inputBg: '#ECF3EC',
 };
 
 export const DarkTheme: ThemeColors = {
@@ -83,6 +85,7 @@ export const DarkTheme: ThemeColors = {
   overlay: 'rgba(0, 0, 0, 0.6)',
   tabBar: '#0D1A12',
   tabBarBorder: '#1C2E22',
+  inputBg: '#1C2E22',
 };
 
 const Colors = LightTheme;
