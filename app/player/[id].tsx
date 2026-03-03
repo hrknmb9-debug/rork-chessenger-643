@@ -23,6 +23,8 @@ import {
   ShieldBan,
   ShieldCheck,
   MessageCircle,
+  Globe,
+  Languages,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
