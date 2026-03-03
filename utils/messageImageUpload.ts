@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { supabase } from '@/utils/supabaseClient';
 
+const LOG_TAG = '[MessageImageUpload]';
 const MESSAGE_IMAGES_BUCKET = 'message-images';
 
 /** base64 を ArrayBuffer に変換（atob が無い React Native でも動作するフォールバック付き） */
@@ -34,12 +35,36 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/** iOS の ph:// 等を file:// に変換してから読むためのフォールバック（expo-image-manipulator 使用） */
+async function readImageViaManipulator(uri: string): Promise<ArrayBuffer | null> {
+  try {
+    const ImageManipulator = await import('expo-image-manipulator');
+    type Mod = typeof ImageManipulator & { SaveFormat?: { JPEG: number } };
+    const format = (ImageManipulator as Mod).SaveFormat?.JPEG ?? 1;
+    const result = await ImageManipulator.manipulateAsync(uri, [], {
+      compress: 0.85,
+      format,
+    });
+    const outUri = result?.uri;
+    if (!outUri) {
+      console.warn(LOG_TAG, 'manipulateAsync returned no uri');
+      return null;
+    }
+    const FileSystem = await import('expo-file-system/legacy').catch(() => import('expo-file-system'));
+    const base64 = await FileSystem.readAsStringAsync(outUri, { encoding: FileSystem.EncodingType.Base64 });
+    if (base64) return base64ToArrayBuffer(base64);
+  } catch (e) {
+    console.warn(LOG_TAG, 'readImageViaManipulator failed', e);
+  }
+  return null;
+}
+
 export type MessageImageUploadResult = { url: string } | { error: string };
 
 /**
  * 画像を Supabase Storage (message-images) にアップロードし、公開URLまたはエラーを返す。
  * - RLS: パス先頭は auth.jwt()->>'sub' と一致させるため userId に認証ユーザーIDを渡すこと。
- * - base64FromPicker: ピッカーから base64 を渡すと確実（ネイティブでは fetch(ph://) が失敗しやすい）。
+ * - base64FromPicker: ピッカーから base64 を渡すと確実（iOS では未返却になることがある）。
  */
 export async function uploadMessageImage(
   localUri: string,
@@ -48,19 +73,27 @@ export async function uploadMessageImage(
   base64FromPicker?: string
 ): Promise<MessageImageUploadResult> {
   let arrayBuffer: ArrayBuffer | null = null;
+
   try {
     if (base64FromPicker && base64FromPicker.length > 0) {
+      console.log(LOG_TAG, 'step: using base64 from picker, length=', base64FromPicker.length);
       arrayBuffer = base64ToArrayBuffer(base64FromPicker);
     } else if (Platform.OS === 'web') {
+      console.log(LOG_TAG, 'step: web fetch', localUri.slice(0, 80));
       const response = await fetch(localUri);
-      if (!response.ok) return { error: `画像の読み込みに失敗しました (${response.status})` };
+      if (!response.ok) {
+        console.warn(LOG_TAG, 'web fetch failed', response.status);
+        return { error: `画像の読み込みに失敗しました (${response.status})` };
+      }
       arrayBuffer = await response.arrayBuffer();
     } else {
+      // ネイティブ: base64 が無い場合 fetch → FileSystem → ImageManipulator の順で試す
+      console.log(LOG_TAG, 'step: native, uri scheme=', localUri.slice(0, 20), 'base64FromPicker=', !!base64FromPicker);
       try {
         const res = await fetch(localUri);
         if (res.ok) arrayBuffer = await res.arrayBuffer();
-      } catch {
-        // ネイティブで fetch が失敗する場合
+      } catch (fetchErr) {
+        console.warn(LOG_TAG, 'native fetch failed (expected for ph:// on iOS)', fetchErr);
       }
       if (!arrayBuffer) {
         try {
@@ -68,21 +101,30 @@ export async function uploadMessageImage(
           const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
           if (base64) arrayBuffer = base64ToArrayBuffer(base64);
         } catch (fsErr) {
-          const msg = fsErr instanceof Error ? fsErr.message : String(fsErr);
-          return { error: `画像の読み込みに失敗しました。${msg}` };
+          console.warn(LOG_TAG, 'FileSystem.readAsStringAsync failed', fsErr);
         }
       }
+      if (!arrayBuffer) {
+        console.log(LOG_TAG, 'step: trying ImageManipulator fallback (ph:// etc.)');
+        arrayBuffer = await readImageViaManipulator(localUri);
+      }
     }
-    if (!arrayBuffer || arrayBuffer.byteLength === 0) return { error: '画像データが空です' };
+
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      console.warn(LOG_TAG, 'no image data: arrayBuffer=', !!arrayBuffer, 'byteLength=', arrayBuffer?.byteLength);
+      return { error: '画像データが取得できませんでした。別の画像をお試しください。' };
+    }
+    console.log(LOG_TAG, 'image read ok, size=', arrayBuffer.byteLength);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.log('Message image read failed', e);
-    return { error: `画像の読み込みに失敗: ${msg}` };
+    console.warn(LOG_TAG, 'read failed', e);
+    return { error: `画像の読み込みに失敗しました: ${msg}` };
   }
 
   const fileExt = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
   const filePath = `${userId}/${roomId}/${Date.now()}.${fileExt}`;
   const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+  console.log(LOG_TAG, 'uploading to', MESSAGE_IMAGES_BUCKET, filePath);
 
   try {
     const { error: uploadError } = await supabase.storage
@@ -94,18 +136,22 @@ export async function uploadMessageImage(
       });
 
     if (uploadError) {
-      console.log('Message image upload error:', uploadError.message, uploadError.name);
+      console.warn(LOG_TAG, 'storage upload error', uploadError.message, uploadError.name, uploadError);
       return { error: `アップロードに失敗しました: ${uploadError.message}` };
     }
 
     const { data } = supabase.storage.from(MESSAGE_IMAGES_BUCKET).getPublicUrl(filePath);
     const publicUrl = (data?.publicUrl ?? '').trim();
-    if (!publicUrl) return { error: '公開URLの取得に失敗しました' };
+    if (!publicUrl) {
+      console.warn(LOG_TAG, 'getPublicUrl returned empty');
+      return { error: '公開URLの取得に失敗しました' };
+    }
+    console.log(LOG_TAG, 'upload success', publicUrl.slice(0, 60));
     return { url: publicUrl + '?t=' + Date.now() };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.log('Message image upload failed', e);
-    return { error: `アップロードに失敗: ${msg}` };
+    console.warn(LOG_TAG, 'upload exception', e);
+    return { error: `アップロードに失敗しました: ${msg}` };
   }
 }
 

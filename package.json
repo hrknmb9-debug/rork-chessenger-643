@@ -25,6 +25,7 @@
     "expo-av": "~15.0.2",
     "expo-file-system": "~18.1.11",
     "expo-image": "~3.0.11",
+    "expo-image-manipulator": "~14.0.3",
     "expo-image-picker": "~17.0.9",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.10",
