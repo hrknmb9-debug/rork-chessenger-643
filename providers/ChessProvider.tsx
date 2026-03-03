@@ -581,7 +581,13 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             read: n.is_read,
             relatedId: n.related_id ?? undefined,
           }));
-          setNotifications(mapped);
+          setNotifications((prev) => {
+            const dbIds = new Set(mapped.map((n) => n.id));
+            const fromRealtimeOnly = prev.filter((n) => !dbIds.has(n.id));
+            const merged = [...mapped, ...fromRealtimeOnly];
+            merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            return merged.slice(0, 50);
+          });
           console.log('ChessProvider: Loaded', mapped.length, 'notifications from Supabase');
         }
         }
