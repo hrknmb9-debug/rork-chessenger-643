@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Search, Swords, User, Newspaper, MessageCircle, Bell } from 'lucide-react-native';
+import { Search, Swords, User, Newspaper, MessageCircle } from 'lucide-react-native';
 import React from 'react';
 import { View, Text } from 'react-native';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -34,7 +34,7 @@ function BadgeIcon({ children, count, colors }: { children: React.ReactNode; cou
 
 export default function TabLayout() {
   const { colors } = useTheme();
-  const { pendingIncoming, language, unreadNotificationCount, totalUnreadMessageCount } = useChess();
+  const { pendingIncoming, language, totalUnreadMessageCount } = useChess();
 
   const matchBadge = pendingIncoming.length;
 
@@ -98,13 +98,7 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="notifications"
-        options={{
-          title: t('notifications', language),
-          tabBarBadge: unreadNotificationCount > 0 ? unreadNotificationCount : undefined,
-          tabBarIcon: ({ color, size }) => (
-            <Bell size={size} color={color} />
-          ),
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="profile"

@@ -13,6 +13,7 @@ import {
   notifyMatchResponse,
   notifyNewMessage,
 } from '@/utils/notifications';
+import { playMessageNotificationSound } from '@/utils/messageNotificationSound';
 
 const LANGUAGE_KEY = 'chess_language';
 
@@ -702,6 +703,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         if (!currentUserId || msg.sender_id === currentUserId) return;
         if (!msg.room_id.includes(currentUserId)) return;
         setUnreadCountByUserId(prev => ({ ...prev, [msg.sender_id]: (prev[msg.sender_id] ?? 0) + 1 }));
+        playMessageNotificationSound();
         try {
           const sender = await fetchPlayerProfile(msg.sender_id);
           const preview = (msg.content || '').startsWith('__IMG__') ? '📷 画像' : (msg.content || '').substring(0, 60);
