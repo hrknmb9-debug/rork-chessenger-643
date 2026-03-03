@@ -40,7 +40,6 @@ interface SupabaseProfile {
   id: string;
   name?: string;
   avatar?: string;
-  avatar_url?: string;
   bio?: string;
   rating?: number;
   chess_com_rating?: number | null;
@@ -72,7 +71,7 @@ function mapProfile(profile: SupabaseProfile, userLat?: number, userLon?: number
   return {
     id: profile.id,
     name: profile.name ?? 'Unknown',
-    avatar: resolveAvatarUrl(profile.avatar_url ?? profile.avatar),
+    avatar: resolveAvatarUrl(profile.avatar),
     rating: profile.rating ?? 0,
     chessComRating: profile.chess_com_rating ?? null,
     lichessRating: profile.lichess_rating ?? null,

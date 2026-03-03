@@ -128,7 +128,7 @@ export default function EditProfileScreen() {
 
       const { error: upsertError } = await supabaseNoAuth
         .from('profiles')
-        .upsert({ id: user.id, avatar_url: publicUrl });
+        .upsert({ id: user.id, avatar: publicUrl });
 
       if (upsertError) {
         console.log('Avatar upload: Profile upsert error', upsertError.message);
