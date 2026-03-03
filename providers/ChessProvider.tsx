@@ -1635,25 +1635,32 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         }
 
         if (event && insertedPost) {
-          await supabase.from('events').insert({
-            id: event.id,
-            post_id: insertedPost.id,
-            title: event.title,
-            date: event.date,
-            time: event.time,
-            location: event.location,
-            max_participants: event.maxParticipants,
-            created_at: event.createdAt,
-            deadline_at: event.deadlineAt ?? null,
-            closed_at: null,
-          });
+          const { data: insertedEvent, error: eventError } = await supabase
+            .from('events')
+            .insert({
+              post_id: insertedPost.id,
+              title: event.title,
+              date: event.date,
+              time: event.time,
+              location: event.location,
+              max_participants: event.maxParticipants,
+              created_at: event.createdAt,
+              deadline_at: event.deadlineAt ?? null,
+              closed_at: null,
+            })
+            .select()
+            .single();
 
-          await supabase.from('event_participants').insert({
-            event_id: event.id,
-            user_id: user.id,
-          });
+          if (eventError) {
+            console.log('Event insert error:', eventError.message);
+          } else if (insertedEvent) {
+            await supabase.from('event_participants').insert({
+              event_id: insertedEvent.id as string,
+              user_id: user.id,
+            });
 
-          console.log('Event synced to Supabase');
+            console.log('Event synced to Supabase, id:', insertedEvent.id);
+          }
         }
       }
 

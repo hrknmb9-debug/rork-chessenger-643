@@ -330,6 +330,7 @@ export default function TimelineScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { timelinePosts, toggleLike, addComment, addTimelinePost, language, refreshPlayers, refreshTimeline, activeUsersCount, currentUserId } = useChess();
   const router = useRouter();
+  const [filter, setFilter] = useState<'all' | 'events'>('all');
   const [newPostText, setNewPostText] = useState<string>('');
   const [showComposer, setShowComposer] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -353,6 +354,11 @@ export default function TimelineScreen() {
   const [showDeadlineDatePicker, setShowDeadlineDatePicker] = useState<boolean>(false);
   const [showDeadlineTimePicker, setShowDeadlineTimePicker] = useState<boolean>(false);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+
+  const filteredPosts = useMemo(
+    () => (filter === 'all' ? timelinePosts : timelinePosts.filter(p => p.type === 'event')),
+    [filter, timelinePosts]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -548,6 +554,24 @@ export default function TimelineScreen() {
 
   const ListHeader = useMemo(() => (
     <View style={styles.composerSection}>
+      <View style={styles.filterTabs}>
+        <Pressable
+          onPress={() => setFilter('all')}
+          style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
+        >
+          <Text style={[styles.filterTabText, filter === 'all' && styles.filterTabTextActive]}>
+            {language === 'ja' ? 'すべて' : 'All'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setFilter('events')}
+          style={[styles.filterTab, filter === 'events' && styles.filterTabActive]}
+        >
+          <Text style={[styles.filterTabText, filter === 'events' && styles.filterTabTextActive]}>
+            {language === 'ja' ? 'イベントのみ' : 'Events only'}
+          </Text>
+        </Pressable>
+      </View>
       {activeUsersCount > 0 && (
         <View style={styles.activeUsersBar}>
           <View style={styles.activeUsersDot} />
@@ -617,7 +641,7 @@ export default function TimelineScreen() {
         </View>
       )}
     </View>
-  ), [showComposer, newPostText, language, handleNewPost, colors, styles, activeUsersCount, postImageUrl, handlePickImage, handleTemplateSelect]);
+  ), [showComposer, newPostText, language, handleNewPost, colors, styles, activeUsersCount, postImageUrl, handlePickImage, handleTemplateSelect, filter]);
 
   return (
     <KeyboardAvoidingView
@@ -626,7 +650,7 @@ export default function TimelineScreen() {
       testID="timeline-screen"
     >
       <FlatList
-        data={timelinePosts}
+        data={filteredPosts}
         renderItem={renderPost}
         keyExtractor={keyExtractor}
         ListHeaderComponent={ListHeader}
@@ -896,6 +920,11 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     listContent: { paddingBottom: 20 },
+    filterTabs: { flexDirection: 'row', alignSelf: 'center', backgroundColor: colors.surface, borderRadius: 999, padding: 4, marginBottom: 12, borderWidth: 1, borderColor: colors.cardBorder },
+    filterTab: { flex: 1, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 999, alignItems: 'center' as const, justifyContent: 'center' as const },
+    filterTabActive: { backgroundColor: colors.gold },
+    filterTabText: { fontSize: 13, fontWeight: '600' as const, color: colors.textMuted },
+    filterTabTextActive: { color: colors.white },
     composerSection: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
     activeUsersBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.greenMuted, borderRadius: 10 },
     activeUsersDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
