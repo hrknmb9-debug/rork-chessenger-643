@@ -175,3 +175,10 @@ export function isImageMessageContent(text: string | undefined | null): boolean 
 export function getImageUrlFromContent(text: string): string {
   return text.startsWith(IMG_PREFIX) ? text.slice(IMG_PREFIX.length) : '';
 }
+
+/** ブラウザ/WebView で安全に表示できる画像URLか（file:// やローカルパスは false） */
+export function isLoadableImageUrl(uri: string | null | undefined): boolean {
+  if (!uri || typeof uri !== 'string' || !uri.trim()) return false;
+  const u = uri.trim();
+  return u.startsWith('http://') || u.startsWith('https://');
+}

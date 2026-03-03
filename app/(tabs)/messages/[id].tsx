@@ -37,6 +37,7 @@ import {
   uploadMessageImage,
   encodeImageContent,
   decodeMessageContent,
+  isLoadableImageUrl,
 } from '@/utils/messageImageUpload';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -280,8 +281,10 @@ function MessageBubble({
             bubbleRadius,
           ]}
         >
-          {(isImage || imageUrl) && imageUrl ? (
+          {(isImage || imageUrl) && imageUrl && isLoadableImageUrl(imageUrl) ? (
             <Image source={{ uri: imageUrl }} style={styles.imageMessage} contentFit="cover" />
+          ) : (isImage || imageUrl) && imageUrl ? (
+            <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>📷 画像</Text>
           ) : (
             <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
               {item.text}

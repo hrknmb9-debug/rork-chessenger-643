@@ -29,6 +29,7 @@ import {
   decodeMessageContent,
   isImageMessageContent,
   getImageUrlFromContent,
+  isLoadableImageUrl,
 } from '@/utils/messageImageUpload';
 
 interface SupabaseMessage {
@@ -369,12 +370,14 @@ export default function ChatScreen() {
               isImg ? styles.messageBubbleImage : null,
             ]}
           >
-            {isImg && imgUri ? (
+            {isImg && imgUri && isLoadableImageUrl(imgUri) ? (
               <Image
                 source={{ uri: imgUri }}
                 style={styles.imageMessage}
                 contentFit="cover"
               />
+            ) : isImg && imgUri ? (
+              <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>📷 画像</Text>
             ) : (
               <Text
                 style={[
