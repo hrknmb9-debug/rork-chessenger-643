@@ -327,6 +327,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             maxParticipants: (eventData.max_participants as number) ?? 10,
             participants,
             createdAt: (eventData.created_at as string) ?? post.created_at,
+            deadlineAt: (eventData.deadline_at as string) ?? undefined,
+            isClosed: !!(eventData.closed_at as string | null),
           };
         }
       }
@@ -1642,6 +1644,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             location: event.location,
             max_participants: event.maxParticipants,
             created_at: event.createdAt,
+            deadline_at: event.deadlineAt ?? null,
+            closed_at: null,
           });
 
           await supabase.from('event_participants').insert({
@@ -1664,25 +1668,30 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const joinEvent = useCallback(async (postId: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const userId = authUser?.id ?? currentUserId ?? 'me';
+    const post = timelinePosts.find(p => p.id === postId);
+    if (post?.event) {
+      const pastDeadline = post.event.deadlineAt && new Date(post.event.deadlineAt) <= new Date();
+      if (pastDeadline || post.event.isClosed) return;
+    }
     setTimelinePosts(prev =>
-      prev.map(post => {
-        if (post.id !== postId || !post.event) return post;
-        const isJoined = post.event.participants.includes(userId);
-        if (isJoined) return post;
-        if (post.event.participants.length >= post.event.maxParticipants) return post;
+      prev.map(p => {
+        if (p.id !== postId || !p.event) return p;
+        const isJoined = p.event.participants.includes(userId);
+        if (isJoined) return p;
+        if (p.event.participants.length >= p.event.maxParticipants) return p;
         return {
-          ...post,
+          ...p,
           event: {
-            ...post.event,
-            participants: [...post.event.participants, userId],
+            ...p.event,
+            participants: [...p.event.participants, userId],
           },
         };
       })
     );
 
     try {
-      const post = timelinePosts.find(p => p.id === postId);
-      const eventId = post?.event?.id ?? postId;
+      const postForDb = timelinePosts.find(p => p.id === postId);
+      const eventId = postForDb?.event?.id ?? postId;
       await supabase.from('event_participants').insert({
         event_id: eventId,
         user_id: userId,

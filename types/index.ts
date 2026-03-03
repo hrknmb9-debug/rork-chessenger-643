@@ -71,6 +71,10 @@ export interface TimelineEvent {
   maxParticipants: number;
   participants: string[];
   createdAt: string;
+  /** 募集締め切り日時（ISO）。過ぎているか closed_at が設定されていると参加不可 */
+  deadlineAt?: string | null;
+  /** 手動で締め切られた日時（設定時は参加不可） */
+  isClosed?: boolean;
 }
 
 export interface TimelinePost {

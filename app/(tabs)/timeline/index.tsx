@@ -107,7 +107,7 @@ function PostCard({
   language: string;
 }) {
   const { colors } = useTheme();
-  const { currentUserId, joinEvent, leaveEvent } = useChess();
+  const { currentUserId, joinEvent } = useChess();
   const [showComments, setShowComments] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
   const [replyToId, setReplyToId] = useState<string | null>(null);
@@ -181,6 +181,9 @@ function PostCard({
   };
 
   const isEventJoined = post.event?.participants.includes(userId);
+  const isEventClosed =
+    !!post.event &&
+    ((!!post.event.deadlineAt && new Date(post.event.deadlineAt) <= new Date()) || !!post.event.isClosed);
 
   return (
     <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.cardBorder, overflow: 'hidden' }}>
@@ -246,28 +249,25 @@ function PostCard({
               </Text>
             </View>
           </View>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              if (isEventJoined) {
-                leaveEvent(post.id);
-              } else {
+          {isEventClosed ? (
+            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.divider }}>
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.textMuted }}>{t('event_closed', language)}</Text>
+            </View>
+          ) : isEventJoined ? (
+            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.greenMuted, borderWidth: 1, borderColor: colors.green }}>
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.green }}>{t('event_joined', language)}</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 joinEvent(post.id);
-              }
-            }}
-            style={{
-              alignItems: 'center',
-              paddingVertical: 10,
-              borderRadius: 10,
-              backgroundColor: isEventJoined ? colors.surface : colors.green,
-              borderWidth: isEventJoined ? 1 : 0,
-              borderColor: colors.green,
-            }}
-          >
-            <Text style={{ fontSize: 14, fontWeight: '700' as const, color: isEventJoined ? colors.green : colors.white }}>
-              {isEventJoined ? t('leave_event', language) : t('join_event', language)}
-            </Text>
-          </Pressable>
+              }}
+              style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.green }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.white }}>{t('join_event', language)}</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -343,6 +343,15 @@ export default function TimelineScreen() {
   const [eventMaxParticipants, setEventMaxParticipants] = useState<string>('10');
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [showTimePicker, setShowTimePicker] = useState<boolean>(false);
+  const [eventDeadlineDate, setEventDeadlineDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  });
+  const [eventDeadlineHour, setEventDeadlineHour] = useState<number>(23);
+  const [eventDeadlineMinute, setEventDeadlineMinute] = useState<number>(59);
+  const [showDeadlineDatePicker, setShowDeadlineDatePicker] = useState<boolean>(false);
+  const [showDeadlineTimePicker, setShowDeadlineTimePicker] = useState<boolean>(false);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
 
   const onRefresh = useCallback(async () => {
@@ -448,11 +457,42 @@ export default function TimelineScreen() {
     }
   }, []);
 
+  const adjustDeadlineDate = useCallback((field: 'year' | 'month' | 'day', delta: number) => {
+    Haptics.selectionAsync();
+    setEventDeadlineDate(prev => {
+      const next = new Date(prev);
+      if (field === 'year') next.setFullYear(next.getFullYear() + delta);
+      else if (field === 'month') next.setMonth(next.getMonth() + delta);
+      else next.setDate(next.getDate() + delta);
+      return next;
+    });
+  }, []);
+
+  const adjustDeadlineTime = useCallback((field: 'hour' | 'minute', delta: number) => {
+    Haptics.selectionAsync();
+    if (field === 'hour') {
+      setEventDeadlineHour(prev => {
+        const next = prev + delta;
+        if (next < 0) return 23;
+        if (next > 23) return 0;
+        return next;
+      });
+    } else {
+      setEventDeadlineMinute(prev => {
+        const next = prev + delta;
+        if (next < 0) return 59;
+        if (next > 59) return 0;
+        return next;
+      });
+    }
+  }, []);
+
   const handleCreateEvent = useCallback(() => {
     if (!eventTitle.trim()) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const dateStr = formatDateForStorage(eventDate);
     const timeStr = formatTimeDisplay(eventHour, eventMinute);
+    const deadlineStr = `${formatDateForStorage(eventDeadlineDate)}T${String(eventDeadlineHour).padStart(2, '0')}:${String(eventDeadlineMinute).padStart(2, '0')}:00`;
     const event: TimelineEvent = {
       id: `evt_${Date.now()}`,
       userId: currentUserId ?? 'me',
@@ -463,6 +503,7 @@ export default function TimelineScreen() {
       maxParticipants: parseInt(eventMaxParticipants, 10) || 10,
       participants: [currentUserId ?? 'me'],
       createdAt: new Date().toISOString(),
+      deadlineAt: deadlineStr,
     };
     addTimelinePost(eventTitle.trim(), 'event', undefined, undefined, event);
     setShowEventModal(false);
@@ -474,7 +515,16 @@ export default function TimelineScreen() {
     setEventMaxParticipants('10');
     setShowDatePicker(false);
     setShowTimePicker(false);
-  }, [eventTitle, eventDate, eventHour, eventMinute, eventLocation, eventMaxParticipants, currentUserId, addTimelinePost, formatDateForStorage, formatTimeDisplay]);
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      setEventDeadlineDate(d);
+    })();
+    setEventDeadlineHour(23);
+    setEventDeadlineMinute(59);
+    setShowDeadlineDatePicker(false);
+    setShowDeadlineTimePicker(false);
+  }, [eventTitle, eventDate, eventHour, eventMinute, eventDeadlineDate, eventDeadlineHour, eventDeadlineMinute, eventLocation, eventMaxParticipants, currentUserId, addTimelinePost, formatDateForStorage, formatTimeDisplay]);
 
   const handleComment = useCallback((postId: string, text: string, parentId?: string) => {
     addComment(postId, text, parentId);
@@ -702,6 +752,107 @@ export default function TimelineScreen() {
                   </View>
                 </View>
                 <Pressable onPress={() => setShowTimePicker(false)} style={styles.pickerDoneBtn}>
+                  <Text style={styles.pickerDoneText}>{language === 'ja' ? '完了' : 'Done'}</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <Text style={styles.modalLabel}>{t('event_deadline', language)}</Text>
+            <TouchableOpacity
+              onPress={() => { setShowDeadlineDatePicker(prev => !prev); setShowDeadlineTimePicker(false); }}
+              style={[styles.pickerTrigger, showDeadlineDatePicker && styles.pickerTriggerActive]}
+              activeOpacity={0.7}
+            >
+              <Calendar size={16} color={showDeadlineDatePicker ? colors.green : colors.textMuted} />
+              <Text style={[styles.pickerTriggerText, showDeadlineDatePicker && { color: colors.green }]}>
+                {formatDateDisplay(eventDeadlineDate)}
+              </Text>
+            </TouchableOpacity>
+            {showDeadlineDatePicker && (
+              <View style={styles.pickerContainer}>
+                <View style={styles.pickerRow}>
+                  <View style={styles.pickerColumn}>
+                    <Text style={styles.pickerColumnLabel}>{language === 'ja' ? '年' : 'Year'}</Text>
+                    <View style={styles.pickerSpinner}>
+                      <Pressable onPress={() => adjustDeadlineDate('year', -1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▲</Text>
+                      </Pressable>
+                      <Text style={styles.pickerValue}>{eventDeadlineDate.getFullYear()}</Text>
+                      <Pressable onPress={() => adjustDeadlineDate('year', 1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▼</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.pickerColumn}>
+                    <Text style={styles.pickerColumnLabel}>{language === 'ja' ? '月' : 'Month'}</Text>
+                    <View style={styles.pickerSpinner}>
+                      <Pressable onPress={() => adjustDeadlineDate('month', -1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▲</Text>
+                      </Pressable>
+                      <Text style={styles.pickerValue}>{eventDeadlineDate.getMonth() + 1}</Text>
+                      <Pressable onPress={() => adjustDeadlineDate('month', 1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▼</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.pickerColumn}>
+                    <Text style={styles.pickerColumnLabel}>{language === 'ja' ? '日' : 'Day'}</Text>
+                    <View style={styles.pickerSpinner}>
+                      <Pressable onPress={() => adjustDeadlineDate('day', -1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▲</Text>
+                      </Pressable>
+                      <Text style={styles.pickerValue}>{eventDeadlineDate.getDate()}</Text>
+                      <Pressable onPress={() => adjustDeadlineDate('day', 1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▼</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+                <Pressable onPress={() => setShowDeadlineDatePicker(false)} style={styles.pickerDoneBtn}>
+                  <Text style={styles.pickerDoneText}>{language === 'ja' ? '完了' : 'Done'}</Text>
+                </Pressable>
+              </View>
+            )}
+            <TouchableOpacity
+              onPress={() => { setShowDeadlineTimePicker(prev => !prev); setShowDeadlineDatePicker(false); }}
+              style={[styles.pickerTrigger, showDeadlineTimePicker && styles.pickerTriggerActive]}
+              activeOpacity={0.7}
+            >
+              <Calendar size={16} color={showDeadlineTimePicker ? colors.green : colors.textMuted} />
+              <Text style={[styles.pickerTriggerText, showDeadlineTimePicker && { color: colors.green }]}>
+                {formatTimeDisplay(eventDeadlineHour, eventDeadlineMinute)}
+              </Text>
+            </TouchableOpacity>
+            {showDeadlineTimePicker && (
+              <View style={styles.pickerContainer}>
+                <View style={styles.pickerRow}>
+                  <View style={styles.pickerColumn}>
+                    <Text style={styles.pickerColumnLabel}>{language === 'ja' ? '時' : 'Hour'}</Text>
+                    <View style={styles.pickerSpinner}>
+                      <Pressable onPress={() => adjustDeadlineTime('hour', -1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▲</Text>
+                      </Pressable>
+                      <Text style={styles.pickerValue}>{String(eventDeadlineHour).padStart(2, '0')}</Text>
+                      <Pressable onPress={() => adjustDeadlineTime('hour', 1)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▼</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <Text style={styles.pickerSeparator}>:</Text>
+                  <View style={styles.pickerColumn}>
+                    <Text style={styles.pickerColumnLabel}>{language === 'ja' ? '分' : 'Min'}</Text>
+                    <View style={styles.pickerSpinner}>
+                      <Pressable onPress={() => adjustDeadlineTime('minute', -15)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▲</Text>
+                      </Pressable>
+                      <Text style={styles.pickerValue}>{String(eventDeadlineMinute).padStart(2, '0')}</Text>
+                      <Pressable onPress={() => adjustDeadlineTime('minute', 15)} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▼</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+                <Pressable onPress={() => setShowDeadlineTimePicker(false)} style={styles.pickerDoneBtn}>
                   <Text style={styles.pickerDoneText}>{language === 'ja' ? '完了' : 'Done'}</Text>
                 </Pressable>
               </View>
