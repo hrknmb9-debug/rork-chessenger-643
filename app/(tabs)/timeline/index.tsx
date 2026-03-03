@@ -507,7 +507,7 @@ export default function TimelineScreen() {
       time: timeStr,
       location: eventLocation.trim(),
       maxParticipants: parseInt(eventMaxParticipants, 10) || 10,
-      participants: [currentUserId ?? 'me'],
+      participants: [],
       createdAt: new Date().toISOString(),
       deadlineAt: deadlineStr,
     };

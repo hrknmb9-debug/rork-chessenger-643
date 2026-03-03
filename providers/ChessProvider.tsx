@@ -1654,17 +1654,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           if (eventError) {
             console.log('Event insert error:', eventError.message);
           } else if (insertedEvent) {
-            await supabase.from('event_participants').insert({
-              event_id: insertedEvent.id as string,
-              user_id: user.id,
-            });
-
             console.log('Event synced to Supabase, id:', insertedEvent.id);
           }
         }
       }
-
-      await refreshTimeline();
     } catch (e) {
       console.log('Post sync failed', e);
     }
