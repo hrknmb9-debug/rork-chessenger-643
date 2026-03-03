@@ -27,26 +27,25 @@ import {
   MapPin,
   HelpCircle,
   FileText,
-  Languages,
   Sun,
   Moon,
   Navigation,
   MapPinOff,
   LogOut,
 } from 'lucide-react-native';
-import { Modal } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useLocation } from '@/providers/LocationProvider';
-import { t, SUPPORTED_LANGUAGES } from '@/utils/translations';
+import { t } from '@/utils/translations';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 export default function SettingsScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { language, toggleLanguage, changeLanguage } = useChess();
+  const { language } = useChess();
   const { logout, isLoggedIn } = useAuth();
   const { userLocation, locationEnabled, toggleLocationEnabled } = useLocation();
   const router = useRouter();
@@ -63,13 +62,6 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleTheme();
   }, [toggleTheme]);
-
-  const [showLangPicker, setShowLangPicker] = useState<boolean>(false);
-
-  const handleToggleLanguage = useCallback(() => {
-    Haptics.selectionAsync();
-    setShowLangPicker(true);
-  }, []);
 
   const handleToggleLocation = useCallback(() => {
     Haptics.selectionAsync();
@@ -296,16 +288,7 @@ export default function SettingsScreen() {
 
             <View style={styles.rowDivider} />
 
-            <Pressable onPress={handleToggleLanguage} style={styles.row}>
-              <View style={[styles.iconCircle, { backgroundColor: colors.goldMuted }]}>
-                <Languages size={16} color={colors.gold} />
-              </View>
-              <Text style={styles.rowText}>{t('language_setting', language)}</Text>
-              <View style={styles.langBadge}>
-                <Text style={styles.langBadgeText}>{language === 'ja' ? 'JA' : 'EN'}</Text>
-              </View>
-              <ChevronRight size={16} color={colors.textMuted} />
-            </Pressable>
+            <LanguageSelector variant="full" />
 
             <View style={styles.rowDivider} />
 
@@ -372,45 +355,6 @@ export default function SettingsScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      <Modal
-        visible={showLangPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowLangPicker(false)}
-      >
-        <View style={styles.langPickerContainer}>
-          <View style={styles.langPickerHeader}>
-            <Text style={styles.langPickerTitle}>{t('select_language', language)}</Text>
-            <Pressable onPress={() => setShowLangPicker(false)} style={{ padding: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: '600' as const, color: colors.gold }}>{t('done', language)}</Text>
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.langPickerList}>
-            {SUPPORTED_LANGUAGES.map(lang => {
-              const isActive = language === lang.code;
-              return (
-                <Pressable
-                  key={lang.code}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    changeLanguage(lang.code);
-                    setShowLangPicker(false);
-                  }}
-                  style={[styles.langPickerItem, isActive && styles.langPickerItemActive]}
-                >
-                  <Text style={styles.langPickerFlag}>{lang.flag}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.langPickerName, isActive && styles.langPickerNameActive]}>{lang.nativeName}</Text>
-                    <Text style={styles.langPickerSubname}>{lang.name}</Text>
-                  </View>
-                  {isActive && <View style={styles.langPickerCheck} />}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -504,17 +448,6 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.blue,
       alignSelf: 'flex-end' as const,
     },
-    langBadge: {
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
-      backgroundColor: colors.goldMuted,
-    },
-    langBadgeText: {
-      fontSize: 11,
-      fontWeight: '700' as const,
-      color: colors.gold,
-    },
     versionText: {
       fontSize: 14,
       color: colors.textMuted,
@@ -537,62 +470,6 @@ function createStyles(colors: ThemeColors) {
     },
     bottomSpacer: {
       height: 40,
-    },
-    langPickerContainer: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    langPickerHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
-    },
-    langPickerTitle: {
-      fontSize: 20,
-      fontWeight: '700' as const,
-      color: colors.textPrimary,
-    },
-    langPickerList: {
-      paddingHorizontal: 16,
-      paddingBottom: 40,
-    },
-    langPickerItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      borderRadius: 12,
-      marginVertical: 2,
-      gap: 12,
-    },
-    langPickerItemActive: {
-      backgroundColor: colors.goldMuted,
-    },
-    langPickerFlag: {
-      fontSize: 24,
-    },
-    langPickerName: {
-      fontSize: 16,
-      fontWeight: '500' as const,
-      color: colors.textPrimary,
-    },
-    langPickerNameActive: {
-      color: colors.gold,
-      fontWeight: '600' as const,
-    },
-    langPickerSubname: {
-      fontSize: 12,
-      color: colors.textMuted,
-      marginTop: 1,
-    },
-    langPickerCheck: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: colors.gold,
     },
   });
 }

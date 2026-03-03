@@ -24,6 +24,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { SkillLevel, PlayStyle } from '@/types';
 import { t, COUNTRY_OPTIONS, LANGUAGE_OPTIONS, getCountryFlag, getCountryName, getLanguageFlag, getLanguageName } from '@/utils/translations';
 import { supabaseNoAuth } from '@/utils/supabaseClient';
+import { BackNavButton } from '@/components/BackNavButton';
 
 const SKILL_OPTIONS: SkillLevel[] = ['beginner', 'intermediate', 'advanced', 'expert'];
 const TIME_OPTIONS = ['5+0', '10+0', '15+10', '30+0', '60+30'];
@@ -293,11 +294,7 @@ export default function EditProfileScreen() {
           title: t('edit_profile', language),
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.textPrimary,
-          headerLeft: () => (
-            <Pressable onPress={() => router.back()} style={styles.headerBtn}>
-              <X size={22} color={colors.textSecondary} />
-            </Pressable>
-          ),
+          headerLeft: () => <BackNavButton onPress={() => router.back()} />,
           headerRight: () => (
             <Pressable onPress={handleSave} style={styles.headerBtn}>
               <Check size={22} color={colors.gold} />

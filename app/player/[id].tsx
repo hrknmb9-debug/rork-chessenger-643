@@ -19,9 +19,7 @@ import {
   Trophy,
   Send,
   ChevronDown,
-  Languages,
   Navigation,
-  Globe,
   ShieldBan,
   ShieldCheck,
   MessageCircle,
@@ -41,6 +39,7 @@ import {
   formatRating,
 } from '@/utils/helpers';
 import { t, getLanguageFlag, getLanguageName } from '@/utils/translations';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 const TIME_CONTROLS = ['5+0', '10+0', '15+10', '30+0', '60+30'];
 
@@ -48,7 +47,7 @@ export default function PlayerDetailScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { players, sendMatchRequest, language, toggleLanguage, blockUser, unblockUser, isUserBlocked, currentUserId } = useChess();
+  const { players, sendMatchRequest, language, blockUser, unblockUser, isUserBlocked, currentUserId } = useChess();
   const { userLocation } = useLocation();
   const router = useRouter();
   const [selectedTime, setSelectedTime] = useState('15+10');
@@ -153,9 +152,7 @@ export default function PlayerDetailScreen() {
                   <ShieldBan size={20} color={colors.red} />
                 )}
               </Pressable>
-              <Pressable onPress={toggleLanguage} style={styles.headerTranslateBtn}>
-                <Languages size={20} color={colors.gold} />
-              </Pressable>
+              <LanguageSelector variant="compact" />
             </View>
           ),
         }}

@@ -17,6 +17,7 @@ import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { t } from '@/utils/translations';
+import { BackNavButton } from '@/components/BackNavButton';
 
 function StarRating({ value, onChange, label, colors }: { value: number; onChange: (v: number) => void; label: string; colors: ThemeColors }) {
   const ratingStyles = useMemo(() => createRatingStyles(colors), [colors]);
@@ -113,11 +114,7 @@ export default function RateMatchScreen() {
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.textPrimary,
           presentation: 'modal',
-          headerLeft: () => (
-            <Pressable onPress={() => router.back()} style={styles.headerBtn}>
-              <X size={22} color={colors.textSecondary} />
-            </Pressable>
-          ),
+          headerLeft: () => <BackNavButton onPress={() => router.back()} />,
         }}
       />
       <ScrollView

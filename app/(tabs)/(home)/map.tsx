@@ -7,9 +7,8 @@ import {
   Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { SafeImage } from '@/components/SafeImage';
-import { ArrowLeft, Navigation } from 'lucide-react-native';
+import { Navigation } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -18,6 +17,7 @@ import { useLocation } from '@/providers/LocationProvider';
 import { Player } from '@/types';
 import { getSkillColor, formatRating } from '@/utils/helpers';
 import { t } from '@/utils/translations';
+import { BackNavButton } from '@/components/BackNavButton';
 
 let MapView: React.ComponentType<any> | null = null;
 let Marker: React.ComponentType<any> | null = null;
@@ -64,13 +64,8 @@ export default function MapScreen() {
   if (!MapView || !Marker) {
     return (
       <View style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: t('map_view', language),
-            headerStyle: { backgroundColor: colors.background },
-            headerTintColor: colors.textPrimary,
-          }}
-        />
+        <Stack.Screen options={{ headerShown: false }} />
+        <BackNavButton onPress={() => router.back()} floating />
         <View style={styles.fallback}>
           <Navigation size={48} color={colors.textMuted} />
           <Text style={styles.fallbackTitle}>{t('map_view', language)}</Text>
@@ -100,13 +95,8 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: t('map_view', language),
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.textPrimary,
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
+      <BackNavButton onPress={() => router.back()} floating />
       <MapView
         style={styles.map}
         initialRegion={region}
