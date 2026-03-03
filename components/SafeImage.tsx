@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { Component, useState, useEffect } from 'react';
 import { Image } from 'expo-image';
 import { StyleProp, ImageStyle } from 'react-native';
 
@@ -19,6 +19,39 @@ interface SafeImageProps {
   contentFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
 }
 
+type ImageErrorBoundaryProps = {
+  fallbackUri: string;
+  style?: StyleProp<ImageStyle>;
+  contentFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+  children: React.ReactNode;
+};
+
+class ImageErrorBoundary extends Component<
+  ImageErrorBoundaryProps,
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError = () => ({ hasError: true });
+
+  componentDidCatch() {
+    // Swallow so the app doesn't show a red box; we render fallback instead.
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Image
+          source={{ uri: this.props.fallbackUri }}
+          style={this.props.style}
+          contentFit={this.props.contentFit ?? 'cover'}
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function SafeImage({ uri, name, style, contentFit = 'cover' }: SafeImageProps) {
   const fallback = makeFallback(name);
   const [src, setSrc] = useState(() => toSrc(uri, fallback));
@@ -29,11 +62,13 @@ export function SafeImage({ uri, name, style, contentFit = 'cover' }: SafeImageP
   }, [uri]);
 
   return (
-    <Image
-      source={{ uri: src }}
-      style={style}
-      contentFit={contentFit}
-      onError={() => setSrc(fallback)}
-    />
+    <ImageErrorBoundary fallbackUri={fallback} style={style} contentFit={contentFit}>
+      <Image
+        source={{ uri: src }}
+        style={style}
+        contentFit={contentFit}
+        onError={() => setSrc(fallback)}
+      />
+    </ImageErrorBoundary>
   );
 }
