@@ -346,11 +346,6 @@ export default function MessagesScreen() {
     return conversations.filter(c => c.player.name.toLowerCase().includes(q));
   }, [conversations, searchQuery]);
 
-  const totalUnread = useMemo(
-    () => conversations.reduce((sum, c) => sum + c.unreadCount, 0),
-    [conversations]
-  );
-
   const renderConversation = useCallback(({ item }: { item: Conversation }) => (
     <SwipeableConversation
       item={item}
@@ -387,7 +382,7 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Search bar */}
+      {/* Search bar — 通知バッジは各リスト項目とメニューアイコンのみに表示 */}
       <View style={styles.searchBar}>
         <Search size={16} color={colors.textMuted} />
         <TextInput
@@ -397,11 +392,6 @@ export default function MessagesScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        {totalUnread > 0 && (
-          <View style={styles.totalBadge}>
-            <Text style={styles.totalBadgeText}>{totalUnread}</Text>
-          </View>
-        )}
       </View>
 
       {loading ? (
@@ -453,20 +443,6 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       fontSize: 15,
       color: colors.textPrimary,
-    },
-    totalBadge: {
-      backgroundColor: colors.gold,
-      minWidth: 22,
-      height: 22,
-      borderRadius: 11,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 6,
-    },
-    totalBadgeText: {
-      fontSize: 12,
-      fontWeight: '700' as const,
-      color: colors.white,
     },
     // List
     listContent: {

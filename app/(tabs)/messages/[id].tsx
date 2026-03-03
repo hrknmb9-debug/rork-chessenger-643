@@ -52,6 +52,46 @@ type ListItem =
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+const MESSAGE_IMAGES_BUCKET = 'message-images';
+
+/** ローカル画像を Supabase Storage にアップロードし、受信側でも表示できる公開URLを返す */
+async function uploadMessageImage(
+  localUri: string,
+  userId: string,
+  roomId: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(localUri);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) return null;
+
+    const fileExt = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
+    const filePath = `${userId}/${roomId}/${Date.now()}.${fileExt}`;
+    const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+    const { error: uploadError } = await supabase.storage
+      .from(MESSAGE_IMAGES_BUCKET)
+      .upload(filePath, arrayBuffer, {
+        cacheControl: '31536000',
+        upsert: false,
+        contentType,
+      });
+
+    if (uploadError) {
+      console.log('Message image upload error:', uploadError.message);
+      return null;
+    }
+
+    const { data } = supabase.storage.from(MESSAGE_IMAGES_BUCKET).getPublicUrl(filePath);
+    const publicUrl = (data?.publicUrl ?? '').trim();
+    return publicUrl ? publicUrl + '?t=' + Date.now() : null;
+  } catch (e) {
+    console.log('Message image upload failed', e);
+    return null;
+  }
+}
+
 function encodeImageContent(uri: string): string {
   return `__IMG__${uri}`;
 }
@@ -500,14 +540,21 @@ export default function ChatScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        const uri = result.assets[0].uri;
+        const localUri = result.assets[0].uri;
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await sendContent(encodeImageContent(uri));
+
+        const actualRoomId = getActualRoomId();
+        const publicUrl = await uploadMessageImage(localUri, currentUserId ?? '', actualRoomId);
+        if (publicUrl) {
+          await sendContent(encodeImageContent(publicUrl));
+        } else {
+          Alert.alert(t('error', language), '画像のアップロードに失敗しました。Storage バケット「message-images」の公開設定を確認してください。');
+        }
       }
     } catch (e) {
       console.log('Chat: Image pick failed', e);
     }
-  }, [sendContent]);
+  }, [sendContent, getActualRoomId, currentUserId, language]);
 
   // ── Reactions ──────────────────────────────────────────────────────────────
 
