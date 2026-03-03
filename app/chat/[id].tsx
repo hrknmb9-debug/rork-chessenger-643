@@ -254,7 +254,7 @@ export default function ChatScreen() {
           sender_id: currentUserId,
           content,
           is_read: false,
-          ...(isImage && imageUrl ? { image_url: imageUrl } : {}),
+          image_url: isImage && imageUrl ? imageUrl : null,
         };
         const { data, error } = await supabase
           .from('messages')
@@ -270,13 +270,16 @@ export default function ChatScreen() {
         } else if (error) {
           pendingTempIds.current.delete(tempId);
           console.log('Chat: send error ' + error.message);
+          Alert.alert(t('error', language), `送信に失敗しました: ${error.message}`);
         }
       } catch (e) {
         pendingTempIds.current.delete(tempId);
+        const msg = e instanceof Error ? e.message : String(e);
         console.log('Chat: send failed ' + String(e));
+        Alert.alert(t('error', language), `送信に失敗しました: ${msg}`);
       }
     },
-    [currentUserId, getActualRoomId],
+    [currentUserId, getActualRoomId, language],
   );
 
   const handleSend = useCallback(async () => {
