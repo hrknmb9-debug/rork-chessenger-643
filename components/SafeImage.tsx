@@ -55,11 +55,46 @@ class ImageErrorBoundary extends Component<
 export function SafeImage({ uri, name, style, contentFit = 'cover' }: SafeImageProps) {
   const fallback = makeFallback(name);
   const [src, setSrc] = useState(() => toSrc(uri, fallback));
+  const [verified, setVerified] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setSrc(toSrc(uri, fallback));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uri]);
+    const raw = toSrc(uri, fallback);
+    if (raw === fallback) {
+      setSrc(fallback);
+      setVerified(true);
+      return;
+    }
+    setVerified(null);
+    let cancelled = false;
+    fetch(raw, { method: 'HEAD' })
+      .then(res => {
+        if (cancelled) return;
+        if (res.ok) {
+          setSrc(raw);
+          setVerified(true);
+        } else {
+          setSrc(fallback);
+          setVerified(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSrc(fallback);
+          setVerified(true);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [uri, fallback]);
+
+  if (verified === null) {
+    return (
+      <Image
+        source={{ uri: fallback }}
+        style={style}
+        contentFit={contentFit}
+      />
+    );
+  }
 
   return (
     <ImageErrorBoundary fallbackUri={fallback} style={style} contentFit={contentFit}>

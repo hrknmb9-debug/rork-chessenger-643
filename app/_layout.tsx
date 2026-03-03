@@ -2,7 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { Platform, View, StatusBar } from "react-native";
+import { LogBox, Platform, View, StatusBar } from "react-native";
+
+LogBox.ignoreLogs([
+  "[SafeImage] onError",
+  "Image data is nil",
+]);
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { LocationProvider } from "@/providers/LocationProvider";
 import { ChessProvider } from "@/providers/ChessProvider";
