@@ -1,7 +1,7 @@
 import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Bell, Clock, Swords, CheckCircle2, XCircle, AlertCircle, MessageCircle } from 'lucide-react-native';
+import { Bell, Swords, CheckCircle2, XCircle, AlertCircle, MessageCircle } from 'lucide-react-native';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { ThemeColors } from '@/constants/colors';
@@ -41,6 +41,7 @@ export default function NotificationsScreen() {
           title: t('notifications', language),
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.textPrimary,
+          headerBackVisible: false,
           headerLeft: () => <BackNavButton onPress={() => router.back()} />,
           headerRight: () =>
             notifications.length > 0 ? (

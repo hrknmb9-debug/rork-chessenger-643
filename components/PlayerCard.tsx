@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import { MapPin, Clock, Zap, Globe, MessageCircle } from 'lucide-react-native';
+import { MapPin, Clock, Zap, Globe } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/providers/ThemeProvider';
 import { ThemeColors } from '@/constants/colors';
@@ -13,12 +13,10 @@ import { SafeImage } from '@/components/SafeImage';
 interface PlayerCardProps {
   player: Player;
   onPress: (player: Player) => void;
-  onMessagePress?: (player: Player) => void;
-  unreadCount?: number;
   language?: Language;
 }
 
-function PlayerCardComponent({ player, onPress, onMessagePress, unreadCount = 0, language = 'ja' }: PlayerCardProps) {
+function PlayerCardComponent({ player, onPress, language = 'ja' }: PlayerCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -65,11 +63,6 @@ function PlayerCardComponent({ player, onPress, onMessagePress, unreadCount = 0,
           <View style={styles.avatarContainer}>
             <SafeImage uri={player.avatar} name={player.name} style={styles.avatar} contentFit="cover" />
             {player.isOnline && <View style={styles.onlineIndicator} />}
-            {unreadCount > 0 && (
-              <View style={[styles.unreadBadge, { backgroundColor: colors.red }]}>
-                <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-              </View>
-            )}
           </View>
           <View style={styles.info}>
             <View style={styles.nameRow}>
@@ -135,18 +128,6 @@ function PlayerCardComponent({ player, onPress, onMessagePress, unreadCount = 0,
             {player.languages.map(lang => (
               <Text key={lang} style={styles.langFlag}>{getLanguageFlag(lang)}</Text>
             ))}
-            {onMessagePress && (
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  onMessagePress(player);
-                }}
-                style={[styles.messageBtn, { backgroundColor: colors.goldMuted, borderColor: colors.gold }]}
-                hitSlop={8}
-              >
-                <MessageCircle size={18} color={colors.gold} />
-              </Pressable>
-            )}
           </View>
         </View>
       </Pressable>
@@ -187,22 +168,6 @@ function createStyles(colors: ThemeColors) {
     },
     avatarContainer: {
       position: 'relative',
-    },
-    unreadBadge: {
-      position: 'absolute',
-      top: -2,
-      right: -2,
-      minWidth: 18,
-      height: 18,
-      borderRadius: 9,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 5,
-    },
-    unreadBadgeText: {
-      fontSize: 10,
-      fontWeight: '700' as const,
-      color: '#fff',
     },
     avatar: {
       width: 52,
@@ -318,14 +283,6 @@ function createStyles(colors: ThemeColors) {
     },
     langFlag: {
       fontSize: 12,
-    },
-    messageBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1.5,
     },
     playStylesRow: {
       flexDirection: 'row',
