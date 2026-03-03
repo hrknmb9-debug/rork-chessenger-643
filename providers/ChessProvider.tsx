@@ -380,9 +380,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     const cutoff = Date.now() - windowMs;
     const kept = prev.filter(p => {
       const authorId = p.author?.id;
-      if (authorId !== userId && authorId !== 'me') return false;
+      const isOwn = authorId === userId || authorId === 'me';
+      if (!isOwn) return false;
       if (builtIds.has(p.id)) return false;
       const created = new Date(p.createdAt).getTime();
+      // 自分のイベント投稿はバックエンド側のデータ不整合があっても極力消さないように固定する
+      if (p.type === 'event') return true;
       return created >= cutoff;
     });
     const merged = [...kept, ...built];
