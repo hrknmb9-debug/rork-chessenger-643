@@ -1364,11 +1364,22 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           .from('post_likes')
           .insert({ post_id: postId, user_id: userId });
         console.log('Like added to Supabase for post', postId);
+        const { data: postRow } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+        const ownerId = postRow?.user_id;
+        if (ownerId && ownerId !== userId) {
+          const actorName = profile?.name ?? 'Someone';
+          await supabase.from('notifications').insert({
+            user_id: ownerId,
+            type: 'post_like',
+            content: `${actorName}があなたの投稿にいいねしました`,
+            related_id: postId,
+          });
+        }
       }
     } catch (e) {
       console.log('Like sync to Supabase failed', e);
     }
-  }, [currentUserId, timelinePosts]);
+  }, [currentUserId, timelinePosts, profile?.name]);
 
   const addComment = useCallback(async (postId: string, content: string, parentId?: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -1406,6 +1417,29 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         parent_id: parentId ?? null,
       });
       console.log('Comment synced to Supabase');
+      const actorName = profile?.name ?? 'Someone';
+      const { data: postRow } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+      const postOwnerId = postRow?.user_id;
+      if (postOwnerId && postOwnerId !== userId) {
+        await supabase.from('notifications').insert({
+          user_id: postOwnerId,
+          type: parentId ? 'post_reply' : 'post_comment',
+          content: parentId ? `${actorName}が返信しました` : `${actorName}がコメントしました`,
+          related_id: postId,
+        });
+      }
+      if (parentId) {
+        const { data: parentRow } = await supabase.from('comments').select('user_id').eq('id', parentId).single();
+        const parentAuthorId = parentRow?.user_id;
+        if (parentAuthorId && parentAuthorId !== userId && parentAuthorId !== postOwnerId) {
+          await supabase.from('notifications').insert({
+            user_id: parentAuthorId,
+            type: 'post_reply',
+            content: `${actorName}が返信しました`,
+            related_id: postId,
+          });
+        }
+      }
     } catch (e) {
       console.log('Comment sync failed', e);
     }
@@ -1509,6 +1543,34 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       }
     } catch (e) {
       console.log('Mark all notifications read sync failed', e);
+    }
+  }, [currentUserId]);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!currentUserId) return;
+    try {
+      const { data: notifsData } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (notifsData && notifsData.length > 0) {
+        const mapped: AppNotification[] = notifsData.map((n: SupabaseNotification) => ({
+          id: n.id,
+          type: n.type as AppNotification['type'],
+          title: n.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          message: n.content,
+          createdAt: n.created_at ?? '',
+          read: n.is_read ?? false,
+          relatedId: n.related_id ?? undefined,
+        }));
+        setNotifications(mapped);
+      } else {
+        setNotifications([]);
+      }
+    } catch (e) {
+      console.log('refreshNotifications failed', e);
     }
   }, [currentUserId]);
 
@@ -1716,6 +1778,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     disputeResultReport,
     markNotificationRead,
     markAllNotificationsRead,
+    refreshNotifications,
     refreshPlayers,
     refreshTimeline,
     reloadProfile,

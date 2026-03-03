@@ -155,6 +155,41 @@ export async function uploadMessageImage(
   }
 }
 
+/** タイムライン投稿用画像アップロード（message-images バケットの userId/timeline/ に保存） */
+export async function uploadTimelineImage(
+  localUri: string,
+  userId: string,
+  base64FromPicker?: string
+): Promise<MessageImageUploadResult> {
+  const arrayBuffer = await (async (): Promise<ArrayBuffer | null> => {
+    if (base64FromPicker?.length) return base64ToArrayBuffer(base64FromPicker);
+    if (Platform.OS === 'web') {
+      const res = await fetch(localUri);
+      return res.ok ? res.arrayBuffer() : null;
+    }
+    return readImageViaManipulator(localUri);
+  })();
+  if (!arrayBuffer) return { error: '画像の読み込みに失敗しました' };
+
+  const fileExt = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
+  const filePath = `${userId}/timeline/${Date.now()}.${fileExt}`;
+  const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+  try {
+    const { error: uploadError } = await supabase.storage
+      .from(MESSAGE_IMAGES_BUCKET)
+      .upload(filePath, arrayBuffer, { cacheControl: '31536000', upsert: false, contentType });
+    if (uploadError) return { error: `アップロードに失敗しました: ${uploadError.message}` };
+    const { data } = supabase.storage.from(MESSAGE_IMAGES_BUCKET).getPublicUrl(filePath);
+    const publicUrl = (data?.publicUrl ?? '').trim();
+    if (!publicUrl) return { error: '公開URLの取得に失敗しました' };
+    return { url: publicUrl + '?t=' + Date.now() };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { error: `アップロードに失敗しました: ${msg}` };
+  }
+}
+
 const IMG_PREFIX = '__IMG__';
 
 export function encodeImageContent(uri: string): string {

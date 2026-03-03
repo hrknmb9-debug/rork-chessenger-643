@@ -40,6 +40,8 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { TimelinePost, TimelineComment, TimelineEvent } from '@/types';
 import { t, getTimeAgo } from '@/utils/translations';
+import { uploadTimelineImage } from '@/utils/messageImageUpload';
+import { supabase } from '@/utils/supabaseClient';
 
 const TEMPLATES = [
   { key: 'beginner', labelKey: 'template_beginner' },
@@ -179,7 +181,7 @@ function PostCard({
   const isEventJoined = post.event?.participants.includes(userId);
 
   return (
-    <View style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.cardBorder }}>
+    <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.cardBorder, overflow: 'hidden' }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <Pressable onPress={() => onAuthorPress(post.author.id)} style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
           <SafeImage uri={post.author.avatar} name={post.author.name} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceLight }} contentFit="cover" />
@@ -349,10 +351,20 @@ export default function TimelineScreen() {
     router.push(`/player/${authorId}` as any);
   }, [router, currentUserId]);
 
-  const handleNewPost = useCallback(() => {
+  const handleNewPost = useCallback(async () => {
     if (!newPostText.trim()) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    addTimelinePost(newPostText.trim(), 'general', postImageUrl ?? undefined);
+    let imageUrl: string | undefined = postImageUrl ?? undefined;
+    if (imageUrl && (imageUrl.startsWith('file://') || !imageUrl.startsWith('http'))) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const result = await uploadTimelineImage(imageUrl, user.id);
+        imageUrl = 'url' in result ? result.url : undefined;
+      } else {
+        imageUrl = undefined;
+      }
+    }
+    addTimelinePost(newPostText.trim(), 'general', imageUrl);
     setNewPostText('');
     setPostImageUrl(null);
     setShowComposer(false);
