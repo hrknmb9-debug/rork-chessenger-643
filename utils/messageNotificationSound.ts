@@ -19,10 +19,31 @@ function getWebAudioContext(): AudioContext | null {
   return webAudioContext;
 }
 
-/** Short chime on web via Web Audio API (880Hz sine, 0.2s). */
-function playChimeWeb(): void {
+/** 初回のユーザー操作時などに呼び出して、Web Audio のコンテキストを起動しておく */
+export async function primeMessageNotificationSound(): Promise<void> {
+  if (Platform.OS !== 'web') return;
   const ctx = getWebAudioContext();
   if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume();
+    } catch {
+      // ユーザー操作でない場合は失敗することがあるが、その場合は黙って無視する
+    }
+  }
+}
+
+/** Short chime on web via Web Audio API (880Hz sine, 0.2s). */
+async function playChimeWeb(): Promise<void> {
+  const ctx = getWebAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume();
+    } catch {
+      return;
+    }
+  }
   try {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -60,7 +81,7 @@ async function playChimeNative(): Promise<void> {
 
 export async function playMessageNotificationSound(): Promise<void> {
   if (Platform.OS === 'web') {
-    playChimeWeb();
+    await playChimeWeb();
     return;
   }
   await playChimeNative();

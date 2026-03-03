@@ -32,6 +32,7 @@ import { Message, Player } from '@/types';
 import { supabase } from '@/utils/supabaseClient';
 import { t, getTimeAgo } from '@/utils/translations';
 import { BackNavButton } from '@/components/BackNavButton';
+import { primeMessageNotificationSound } from '@/utils/messageNotificationSound';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -526,6 +527,8 @@ export default function ChatScreen() {
     const text = inputText.trim();
     if (!text) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // ユーザー操作時に通知音用 AudioContext をウォームアップ
+    primeMessageNotificationSound().catch(() => {});
     setInputText('');
     await sendContent(text);
   }, [inputText, sendContent]);
@@ -543,7 +546,7 @@ export default function ChatScreen() {
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],
@@ -553,8 +556,20 @@ export default function ChatScreen() {
         const localUri = result.assets[0].uri;
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+        // ユーザー操作時に通知音用 AudioContext をウォームアップ
+        primeMessageNotificationSound().catch(() => {});
+
         const actualRoomId = getActualRoomId();
-        const publicUrl = await uploadMessageImage(localUri, currentUserId ?? '', actualRoomId);
+
+        // Storage RLS で要求される認証ユーザーIDを必ず使用する
+        const { data: { user } } = await supabase.auth.getUser();
+        const authUserId = user?.id;
+        if (!authUserId) {
+          Alert.alert(t('error', language), 'ログイン情報を取得できなかったため、画像を送信できませんでした。');
+          return;
+        }
+
+        const publicUrl = await uploadMessageImage(localUri, authUserId, actualRoomId);
         if (publicUrl) {
           await sendContent(encodeImageContent(publicUrl));
         } else {
@@ -564,7 +579,7 @@ export default function ChatScreen() {
     } catch (e) {
       console.log('Chat: Image pick failed', e);
     }
-  }, [sendContent, getActualRoomId, currentUserId, language]);
+  }, [sendContent, getActualRoomId, language]);
 
   // ── Reactions ──────────────────────────────────────────────────────────────
 

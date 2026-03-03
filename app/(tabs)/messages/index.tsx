@@ -23,6 +23,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { Conversation, Message } from '@/types';
 import { supabase } from '@/utils/supabaseClient';
 import { t, getTimeAgo } from '@/utils/translations';
+import { primeMessageNotificationSound } from '@/utils/messageNotificationSound';
 
 interface SupabaseMessage {
   id: string;
@@ -298,6 +299,8 @@ export default function MessagesScreen() {
 
   const handleConversationPress = useCallback((conv: Conversation) => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // 会話をタップしたタイミングで通知音用 AudioContext をウォームアップ
+    primeMessageNotificationSound().catch(() => {});
     // NOTE: markConversationRead は呼ばない。既読処理はトークルーム([id].tsx)を開いた時のみ実行する
     // markConversationRead(conv.id);  // ← 自動既読をここで実行するとバッジが即消えるため無効化
     router.push(`/messages/${conv.id}` as any);
