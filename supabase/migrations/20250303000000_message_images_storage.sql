@@ -1,5 +1,6 @@
 -- RLS for message-images bucket.
--- Create the bucket in Supabase Dashboard: Storage → New bucket → id: message-images, Public: ON
+-- 【必須】Supabase Dashboard: Storage → New bucket → id: message-images, Public: ON で作成すること。
+-- 公開でないと getPublicUrl() のURLが受信側で表示できない。
 
 -- Authenticated users: INSERT (upload) only into their own folder: userId/roomId/filename
 -- Path format: ${userId}/${roomId}/${Date.now()}.${fileExt}

@@ -695,6 +695,13 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     return () => { mounted = false; };
   }, [currentUserId, fetchUnreadCountByUser]);
 
+  /** メッセージ詳細で既読にした直後に呼び、タブバッジ・未読数を即時同期する */
+  const refreshUnreadMessageCounts = useCallback(async () => {
+    if (!currentUserId || currentUserId === 'me') return;
+    const byUser = await fetchUnreadCountByUser(currentUserId);
+    setUnreadCountByUserId(byUser);
+  }, [currentUserId, fetchUnreadCountByUser]);
+
   useEffect(() => {
     const messagesChannel = supabase
       .channel('messages-realtime')
@@ -1711,5 +1718,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     fetchPlayerProfile,
     unreadCountByUserId,
     totalUnreadMessageCount,
+    refreshUnreadMessageCounts,
   };
 });

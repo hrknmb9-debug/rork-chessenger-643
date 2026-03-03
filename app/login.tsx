@@ -20,6 +20,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { t } from '@/utils/translations';
+import { primeAudioForApp, playLoginSuccessSound } from '@/utils/messageNotificationSound';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
@@ -41,6 +42,8 @@ export default function LoginScreen() {
 
   const handleSubmit = useCallback(async () => {
     if (loading) return;
+    // 初回ユーザー操作で音声をアンロック（iOS 自動再生制限対策）
+    await primeAudioForApp().catch(() => {});
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     Animated.sequence([
@@ -52,7 +55,10 @@ export default function LoginScreen() {
     try {
       if (isLogin) {
         const success = await login(email, password);
-        if (success) router.replace('/(tabs)' as any);
+        if (success) {
+          playLoginSuccessSound().catch(() => {});
+          router.replace('/(tabs)' as any);
+        }
       } else {
         const result = await register(name, email, password, {
           chessComRating: parseInt(chessComRating) || 0,
@@ -60,12 +66,15 @@ export default function LoginScreen() {
           bio,
           skillLevel: 'beginner',
         });
-        if (result.success) router.replace('/(tabs)' as any);
+        if (result.success) {
+          playLoginSuccessSound().catch(() => {});
+          router.replace('/(tabs)' as any);
+        }
       }
     } finally {
       setLoading(false);
     }
-  }, [isLogin, name, email, password, chessComRating, lichessRating, bio, loading]);
+  }, [isLogin, name, email, password, chessComRating, lichessRating, bio, loading, login, register, router]);
 
   return (
     <View style={styles.container}>

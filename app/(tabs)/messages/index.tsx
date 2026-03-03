@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -252,6 +253,15 @@ export default function MessagesScreen() {
       setLoading(false);
     }
   }, [isLoggedIn, currentUserId, loadConversations]);
+
+  // メッセージ詳細から戻ったときに一覧の未読バッジを即時反映
+  useFocusEffect(
+    useCallback(() => {
+      if (isLoggedIn && currentUserId && currentUserId !== 'me') {
+        loadConversations();
+      }
+    }, [isLoggedIn, currentUserId, loadConversations])
+  );
 
   // ── Realtime ───────────────────────────────────────────────────────────────
 

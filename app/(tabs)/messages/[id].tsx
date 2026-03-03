@@ -55,22 +55,77 @@ type ListItem =
 
 const MESSAGE_IMAGES_BUCKET = 'message-images';
 
-/** ローカル画像を Supabase Storage にアップロードし、受信側でも表示できる公開URLを返す */
+/** base64 を ArrayBuffer に変換（atob が無い React Native でも動作するフォールバック付き） */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  try {
+    if (typeof atob !== 'undefined') {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+  } catch {
+    // atob が無い or 失敗時は手動デコード
+  }
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Uint8Array(256);
+  for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
+  const len = base64.replace(/=+$/, '').length;
+  const byteLen = (len * 3) >> 2;
+  const bytes = new Uint8Array(byteLen);
+  let p = 0;
+  for (let i = 0; i < len; i += 4) {
+    const a = lookup[base64.charCodeAt(i)];
+    const b = lookup[base64.charCodeAt(i + 1)];
+    const c = i + 2 < len ? lookup[base64.charCodeAt(i + 2)] : 0;
+    const d = i + 3 < len ? lookup[base64.charCodeAt(i + 3)] : 0;
+    bytes[p++] = (a << 2) | (b >> 4);
+    if (p < byteLen) bytes[p++] = ((b & 15) << 4) | (c >> 2);
+    if (p < byteLen) bytes[p++] = ((c & 3) << 6) | d;
+  }
+  return bytes.buffer;
+}
+
+/** ローカル画像を Supabase Storage にアップロードし、受信側でも表示できる公開URLを返す。RLS: bucket message-images, パス先頭は auth.jwt()->>'sub' と一致させること。 */
 async function uploadMessageImage(
   localUri: string,
   userId: string,
   roomId: string
 ): Promise<string | null> {
+  let arrayBuffer: ArrayBuffer | null = null;
   try {
-    const response = await fetch(localUri);
-    if (!response.ok) return null;
-    const arrayBuffer = await response.arrayBuffer();
+    if (Platform.OS === 'web') {
+      const response = await fetch(localUri);
+      if (!response.ok) return null;
+      arrayBuffer = await response.arrayBuffer();
+    } else {
+      try {
+        const res = await fetch(localUri);
+        if (res.ok) arrayBuffer = await res.arrayBuffer();
+      } catch {
+        // fetch が file:// 等で失敗する場合がある
+      }
+      if (!arrayBuffer) {
+        try {
+          const FileSystem = await import('expo-file-system');
+          const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+          if (base64) arrayBuffer = base64ToArrayBuffer(base64);
+        } catch {
+          // expo-file-system 未導入 or 読み込み失敗
+        }
+      }
+    }
     if (!arrayBuffer || arrayBuffer.byteLength === 0) return null;
+  } catch (e) {
+    console.log('Message image read failed', e);
+    return null;
+  }
 
-    const fileExt = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
-    const filePath = `${userId}/${roomId}/${Date.now()}.${fileExt}`;
-    const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+  const fileExt = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
+  const filePath = `${userId}/${roomId}/${Date.now()}.${fileExt}`;
+  const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
+  try {
     const { error: uploadError } = await supabase.storage
       .from(MESSAGE_IMAGES_BUCKET)
       .upload(filePath, arrayBuffer, {
@@ -80,7 +135,7 @@ async function uploadMessageImage(
       });
 
     if (uploadError) {
-      console.log('Message image upload error:', uploadError.message);
+      console.log('Message image upload error:', uploadError.message, uploadError.name);
       return null;
     }
 
@@ -367,7 +422,7 @@ export default function ChatScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { language, currentUserId, fetchPlayerProfile } = useChess();
+  const { language, currentUserId, fetchPlayerProfile, refreshUnreadMessageCounts } = useChess();
   const router = useRouter();
   const flatListRef = useRef<FlatList>(null);
 
@@ -426,6 +481,7 @@ export default function ChatScreen() {
             .eq('room_id', roomId)
             .neq('sender_id', currentUserId)
             .eq('is_read', false);
+          await refreshUnreadMessageCounts();
         }
       } catch (e) {
         console.log('Chat: Failed to load', e);
@@ -435,7 +491,7 @@ export default function ChatScreen() {
     };
 
     loadChat();
-  }, [roomId, currentUserId, isNewConversation, playerIdFromNew, fetchPlayerProfile]);
+  }, [roomId, currentUserId, isNewConversation, playerIdFromNew, fetchPlayerProfile, refreshUnreadMessageCounts]);
 
   // ── Realtime ───────────────────────────────────────────────────────────────
 
@@ -465,13 +521,14 @@ export default function ChatScreen() {
         if (msg.sender_id !== currentUserId) {
           console.log('Notification cleared by: [id].tsx realtime-INSERT auto-mark-read id=', msg.id);
           await supabase.from('messages').update({ is_read: true }).eq('id', msg.id);
+          await refreshUnreadMessageCounts();
         }
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [roomId, currentUserId, isNewConversation]);
+  }, [roomId, currentUserId, isNewConversation, refreshUnreadMessageCounts]);
 
   // ── Send helpers ───────────────────────────────────────────────────────────
 
