@@ -256,6 +256,29 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     allEventParticipants: { event_id: string; user_id: string }[],
     blockedIds: string[]
   ): Promise<TimelinePost[]> => {
+    let events = [...(allEvents ?? [])];
+    let epData = [...allEventParticipants];
+    const eventPostIds = posts.filter(p => (p.type as string) === 'event').map(p => p.id);
+    if (eventPostIds.length > 0) {
+      const hasEventFor = new Set(events.map((e: Record<string, unknown>) => String(e.post_id ?? '')));
+      const missingIds = eventPostIds.filter(id => !hasEventFor.has(id));
+      if (missingIds.length > 0) {
+        const { data: extra } = await supabase.from('events').select('*').in('post_id', missingIds);
+        if (extra && extra.length > 0) {
+          events = [...events, ...extra];
+          const extraEventIds = extra.map((e: Record<string, unknown>) => e.id as string);
+          const existingEpIds = new Set(epData.map(ep => ep.event_id));
+          const newIds = extraEventIds.filter(id => !existingEpIds.has(id));
+          if (newIds.length > 0) {
+            const { data: epExtra } = await supabase
+              .from('event_participants')
+              .select('event_id, user_id')
+              .in('event_id', newIds);
+            if (epExtra) epData = [...epData, ...epExtra];
+          }
+        }
+      }
+    }
     const filteredPosts = posts.filter(p => !blockedIds.includes(p.user_id));
     const authorIds = [...new Set(filteredPosts.map(p => p.user_id))];
     const commentAuthorIds = [...new Set(allComments.map(c => c.user_id))];
@@ -334,8 +357,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       });
 
       // 投稿とイベントは post_id で紐づく（events.post_id = posts.id）
-      const rawEvent = allEvents.find(
-        (e: Record<string, unknown>) => (e.post_id as string) === post.id
+      const rawEvent = events.find(
+        (e: Record<string, unknown>) => String(e.post_id ?? '') === String(post.id ?? '')
       ) as Record<string, unknown> | undefined;
 
       let postType: TimelinePost['type'] =
@@ -344,7 +367,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
       if (rawEvent) {
         postType = 'event';
-        const participants = allEventParticipants
+        const participants = epData
           .filter(ep => ep.event_id === (rawEvent.id as string))
           .map(ep => ep.user_id);
 
@@ -630,12 +653,25 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             .select('post_id, user_id')
             .in('post_id', postIds);
 
-          const { data: eventsData, error: eventsError } = await supabase
+          let eventsData: Record<string, unknown>[] | null = null;
+          let eventsError: { message?: string } | null = null;
+          const { data: eventsFirst, error: eventsErr } = await supabase
             .from('events')
             .select('*')
             .in('post_id', postIds);
+          eventsData = eventsFirst;
+          eventsError = eventsErr;
 
-          if (eventsError) console.log('ChessProvider: events fetch error', eventsError.message);
+          if (eventsError) {
+            console.log('ChessProvider: events fetch error (retrying full)', eventsError.message);
+            const { data: eventsFallback } = await supabase.from('events').select('*');
+            if (eventsFallback && eventsFallback.length > 0) {
+              const postIdSet = new Set(postIds);
+              eventsData = eventsFallback.filter((e: Record<string, unknown>) =>
+                postIdSet.has((e.post_id as string) ?? '')
+              );
+            }
+          }
 
           const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
           let eventParticipantsData: { event_id: string; user_id: string }[] = [];
@@ -1083,7 +1119,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const refreshTimeline = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const userId = user?.id ?? null;
 
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
@@ -1109,12 +1145,25 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           .select('post_id, user_id')
           .in('post_id', postIds);
 
-        const { data: eventsData, error: eventsError } = await supabase
+        let eventsData: Record<string, unknown>[] | null = null;
+        let eventsError: Error | null = null;
+        const { data: eventsFirst, error: eventsErr } = await supabase
           .from('events')
           .select('*')
           .in('post_id', postIds);
+        eventsData = eventsFirst;
+        eventsError = eventsErr;
 
-        if (eventsError) console.log('ChessProvider: events refresh error', eventsError.message);
+        if (eventsError) {
+          console.log('ChessProvider: events fetch error (retrying full)', eventsError.message);
+          const { data: eventsFallback } = await supabase.from('events').select('*');
+          if (eventsFallback && eventsFallback.length > 0) {
+            const postIdSet = new Set(postIds);
+            eventsData = eventsFallback.filter((e: Record<string, unknown>) =>
+              postIdSet.has((e.post_id as string) ?? '')
+            );
+          }
+        }
         const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
         let epData: { event_id: string; user_id: string }[] = [];
         if (eventIds.length > 0) {
@@ -1134,11 +1183,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           blockedUsers
         );
         setTimelinePosts(prev =>
-          applyEventCacheToPosts(mergeRecentOwnPosts(user?.id ?? null, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
+          applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
         );
         console.log('ChessProvider: Timeline refreshed with', built.length, 'posts');
 
-        if (currentUserId) {
+        if (userId) {
           const now = new Date();
           const existingDeadlineNotifs = new Set(
             notifications
@@ -1147,12 +1196,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           );
           for (const post of built) {
             if (post.type !== 'event' || !post.event) continue;
-            if (post.author.id !== currentUserId) continue;
+            if (post.author.id !== userId) continue;
             if (!post.event.deadlineAt || post.event.isClosed) continue;
             const deadline = new Date(post.event.deadlineAt);
             if (deadline <= now && !existingDeadlineNotifs.has(post.id)) {
               await supabase.from('notifications').insert({
-                user_id: currentUserId,
+                user_id: userId,
                 type: 'event_deadline_passed',
                 content: `イベント「${post.event.title}」の募集締切を過ぎました`,
                 related_id: post.id,
@@ -1162,7 +1211,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         }
       } else {
         setTimelinePosts(prev => {
-          const merged = mergeRecentOwnPosts(user?.id ?? null, [], prev, RECENT_OWN_POST_WINDOW_MS);
+          const merged = mergeRecentOwnPosts(userId, [], prev, RECENT_OWN_POST_WINDOW_MS);
           const result = merged.length > 0 ? merged : [];
           return applyEventCacheToPosts(result, prev);
         });
@@ -1170,7 +1219,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     } catch (e) {
       console.log('ChessProvider: Timeline refresh failed', e);
     }
-  }, [blockedUsers, buildTimelinePosts, currentUserId, notifications, mergeRecentOwnPosts, applyEventCacheToPosts]);
+  }, [blockedUsers, buildTimelinePosts, notifications, mergeRecentOwnPosts, applyEventCacheToPosts]);
 
   refreshTimelineRef.current = refreshTimeline;
 
