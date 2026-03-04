@@ -2,14 +2,28 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim();
+const SUPABASE_ANON_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+
+function ensureSupabaseConfig(): void {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    const missing = [!SUPABASE_URL && 'EXPO_PUBLIC_SUPABASE_URL', !SUPABASE_ANON_KEY && 'EXPO_PUBLIC_SUPABASE_ANON_KEY']
+      .filter(Boolean)
+      .join(', ');
+    throw new Error(
+      `Supabase の設定がありません。プロジェクトルートに .env を作成し、${missing} を設定してください。\n` +
+        '例: .env.example を .env にコピーして値を編集\n' +
+        '設定後はアプリを再起動（npx expo start -c）してください。'
+    );
+  }
+}
 
 declare global {
   var _supabaseSingleton: SupabaseClient | undefined;
 }
 
 if (!global._supabaseSingleton) {
+  ensureSupabaseConfig();
   global._supabaseSingleton = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),

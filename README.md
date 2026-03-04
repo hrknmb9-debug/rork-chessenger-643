@@ -39,10 +39,14 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 bun i
 
-# Step 4: Start the instant web preview of your Rork app in your browser, with auto-reloading of your changes
+# Step 4: Supabase を使う場合、環境変数を設定
+cp .env.example .env
+# .env を開き、EXPO_PUBLIC_SUPABASE_URL と EXPO_PUBLIC_SUPABASE_ANON_KEY を Supabase の値に置き換え
+
+# Step 5: Start the instant web preview of your Rork app in your browser, with auto-reloading of your changes
 bun run start-web
 
-# Step 5: Start iOS preview
+# Step 6: Start iOS preview
 # Option A (recommended):
 bun run start  # then press "i" in the terminal to open iOS Simulator
 # Option B (if supported by your environment):
