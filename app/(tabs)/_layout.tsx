@@ -34,7 +34,7 @@ function BadgeIcon({ children, count, colors }: { children: React.ReactNode; cou
 
 export default function TabLayout() {
   const { colors } = useTheme();
-  const { pendingIncoming, language, totalUnreadMessageCount, unreadTimelineNotificationCount } = useChess();
+  const { pendingIncoming, language, totalUnreadMessageCount, unreadTimelineNotificationCount, isRTL } = useChess();
 
   const matchBadge = pendingIncoming.length;
 
@@ -52,6 +52,7 @@ export default function TabLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600' as const,
+          textAlign: isRTL ? 'right' : 'left',
         },
       }}
     >

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Match, MatchStatus, MatchRating, Player, UserProfile, TimelinePost, TimelineComment, TimelineEvent, MatchResultReport, AppNotification, SkillLevel, PlayStyle } from '@/types';
 
 import { useLocation, calculateDistance } from '@/providers/LocationProvider';
-import { Language } from '@/utils/translations';
+import { Language, isRTL, SUPPORTED_LANGUAGES } from '@/utils/translations';
 import { supabase, supabaseNoAuth, clearStaleSession } from '@/utils/supabaseClient';
 import { resolveAvatarUrl } from '@/utils/avatarUrl';
 import {
@@ -221,7 +221,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     playStyles: [],
   };
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
-  const [language, setLanguage] = useState<Language>('ja');
+  const [language, setLanguage] = useState<Language>('en');
   const [timelinePosts, setTimelinePosts] = useState<TimelinePost[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
   const [resultReports, setResultReports] = useState<MatchResultReport[]>([]);
@@ -260,20 +260,25 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     return () => { subscription.unsubscribe(); };
   }, []);
 
+  const supportedCodes = useMemo(() => new Set(SUPPORTED_LANGUAGES.map(l => l.code)), []);
   useEffect(() => {
     const loadLang = async () => {
       try {
         const stored = await AsyncStorage.getItem(LANGUAGE_KEY);
-        if (stored) {
+        if (stored && supportedCodes.has(stored)) {
           setLanguage(stored);
           console.log('ChessProvider: Loaded language', stored);
+        } else if (stored) {
+          setLanguage('en');
+          await AsyncStorage.setItem(LANGUAGE_KEY, 'en');
+          console.log('ChessProvider: Unsupported language', stored, ', reset to en');
         }
       } catch (e) {
         console.log('ChessProvider: Failed to load language', e);
       }
     };
     loadLang();
-  }, []);
+  }, [supportedCodes]);
 
   useEffect(() => {
     const loadEventCache = async () => {
@@ -1299,6 +1304,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   refreshTimelineRef.current = refreshTimeline;
 
   const changeLanguage = useCallback(async (lang: Language) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'034d9e'},body:JSON.stringify({sessionId:'034d9e',location:'ChessProvider:changeLanguage',message:'changeLanguage called',data:{lang},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     setLanguage(lang);
     try {
       await AsyncStorage.setItem(LANGUAGE_KEY, lang);
@@ -1309,7 +1317,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   }, []);
 
   const toggleLanguage = useCallback(() => {
-    const newLang = language === 'ja' ? 'en' : 'ja';
+    const newLang = language === 'en' ? 'ja' : 'en';
     changeLanguage(newLang);
   }, [language, changeLanguage]);
 
@@ -2259,5 +2267,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     unreadCountByUserId,
     totalUnreadMessageCount,
     refreshUnreadMessageCounts,
+    isRTL: isRTL(language),
   };
 });

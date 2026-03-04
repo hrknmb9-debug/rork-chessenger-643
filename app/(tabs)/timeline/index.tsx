@@ -44,7 +44,7 @@ import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { TimelinePost, TimelineComment, TimelineEvent } from '@/types';
-import { t, getTimeAgo } from '@/utils/translations';
+import { t, getTimeAgo, isRTL } from '@/utils/translations';
 import { uploadTimelineImage } from '@/utils/messageImageUpload';
 import { supabase } from '@/utils/supabaseClient';
 import { translateText, getTargetLanguage } from '@/utils/translateText';
@@ -215,6 +215,9 @@ function PostCard({
       setTranslatedEventLocation(null);
       return;
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'034d9e'},body:JSON.stringify({sessionId:'034d9e',location:'timeline:eventTranslateEffect',message:'Event translate effect run',data:{targetLang,language,eventId:post.event?.id,hasTitle:!!post.event?.title?.trim()},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     setTranslatedEventTitle(null);
     setTranslatedEventLocation(null);
     let cancelled = false;
@@ -340,7 +343,7 @@ function PostCard({
       {/* イベント投稿の場合: イベントカードをコンテンツより先に表示（詳細を強調） */}
       {post.event && (
         <View style={{ backgroundColor: colors.greenMuted, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.green + '33', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8 }}>{displayEventTitle}</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8, textAlign: isRTL(language) ? 'right' : 'left' }}>{displayEventTitle}</Text>
           <View style={{ gap: 4, marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Calendar size={13} color={colors.green} />
@@ -403,7 +406,7 @@ function PostCard({
       )}
 
       <View style={{ marginBottom: 12 }}>
-        <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22 }}>
+        <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22, textAlign: isRTL(language) ? 'right' : 'left' }}>
           {isTranslating ? contentText : displayContent}
         </Text>
         {isShowingTranslated && (

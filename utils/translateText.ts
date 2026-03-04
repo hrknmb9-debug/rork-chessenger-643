@@ -7,11 +7,14 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+
+const DEBUG_ENDPOINT = 'http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f';
+const DEBUG_SESSION = '034d9e';
 import { supabase } from '@/utils/supabaseClient';
 
 const TRANSLATE_CACHE_KEY = 'chess_translate_cache';
 const CACHE_MAX_ENTRIES = 500;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const TRANSLATE_DEBUG = __DEV__;
 
 export type TranslateResult = { text: string } | { error: string };
@@ -43,34 +46,35 @@ function safeDecodeTranslated(text: string): string {
 /** 言語コード正規化 (ISO 639-1) */
 function normalizeLang(lang: string): string {
   const map: Record<string, string> = {
-    ja: 'ja', japanese: 'ja',
     en: 'en', english: 'en',
     zh: 'zh', chinese: 'zh',
-    ko: 'ko', korean: 'ko',
-    fr: 'fr', french: 'fr',
-    de: 'de', german: 'de',
+    hi: 'hi', hindi: 'hi',
     es: 'es', spanish: 'es',
+    ar: 'ar', arabic: 'ar',
+    fr: 'fr', french: 'fr',
+    bn: 'bn', bengali: 'bn',
     pt: 'pt', portuguese: 'pt',
     ru: 'ru', russian: 'ru',
-    ar: 'ar', arabic: 'ar',
-    hi: 'hi', hindi: 'hi',
-    it: 'it', th: 'th', vi: 'vi', tr: 'tr', nl: 'nl', pl: 'pl', sv: 'sv',
-    id: 'id', ms: 'ms', tl: 'tl', da: 'da', fi: 'fi', no: 'no',
+    id: 'id', indonesian: 'id',
+    ja: 'ja', japanese: 'ja',
+    ko: 'ko', korean: 'ko',
   };
   return map[lang?.toLowerCase()] ?? (lang?.slice(0, 2) ?? 'en');
 }
 
 /** 設定言語から翻訳先言語を決定 */
 export function getTargetLanguage(preferredLang?: string): string {
-  const lang = preferredLang ?? 'ja';
+  const lang = preferredLang ?? 'en';
   return normalizeLang(lang);
 }
 
-/** 翻訳元言語を推定（日本語・中国語・韓国語等の自動判定） */
+/** 翻訳元言語を推定（日本語・中国語・韓国語・ベンガル語等の自動判定） */
 function detectSourceLang(text: string): string {
   if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) return 'ja';
   if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
+  if (/[\u0980-\u09FF]/.test(text)) return 'bn';
   if (/[\u4E00-\u9FFF]/.test(text) && !/[\u3040-\u309F]/.test(text)) return 'zh';
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
   return 'en';
 }
 
@@ -248,23 +252,34 @@ export async function translateText(
   targetLang: string,
   accessToken?: string | null
 ): Promise<TranslateResult> {
-  if (!text?.trim()) return { error: 'Empty text' };
+  // #region agent log
   const normalizedTarget = normalizeLang(targetLang);
   const sourceLang = detectSourceLang(text);
+  fetch(DEBUG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':DEBUG_SESSION},body:JSON.stringify({sessionId:DEBUG_SESSION,location:'translateText.ts:entry',message:'translateText called',data:{rawTargetLang:targetLang,normalizedTarget,sourceLang,textLen:text?.length,textPreview:text?.slice(0,30),platform:Platform.OS},timestamp:Date.now(),hypothesisId:'H1,H3'})}).catch(()=>{});
+  // #endregion
+  if (!text?.trim()) return { error: 'Empty text' };
   if (sourceLang === normalizedTarget) {
+    // #region agent log
+    fetch(DEBUG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':DEBUG_SESSION},body:JSON.stringify({sessionId:DEBUG_SESSION,location:'translateText.ts:skipSame',message:'Skip source===target',data:{sourceLang,normalizedTarget},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     if (TRANSLATE_DEBUG) console.log('[translate] Skip: source===target', normalizedTarget);
     return { text };
   }
 
   const cached = await getCached(text, normalizedTarget, sourceLang);
   if (cached) {
-    if (TRANSLATE_DEBUG) console.log('[translate] Cache hit');
+    // #region agent log
+    fetch(DEBUG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':DEBUG_SESSION},body:JSON.stringify({sessionId:DEBUG_SESSION,location:'translateText.ts:cacheHit',message:'Cache hit',data:{target:normalizedTarget,source:sourceLang,cachedLen:cached?.length,cachedPreview:cached?.slice(0,40)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     return { text: safeDecodeTranslated(cached) };
   }
 
   const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang, accessToken);
   if (viaEdge && 'text' in viaEdge) {
     const decoded = safeDecodeTranslated(viaEdge.text);
+    // #region agent log
+    fetch(DEBUG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':DEBUG_SESSION},body:JSON.stringify({sessionId:DEBUG_SESSION,location:'translateText.ts:apiSuccess',message:'API translated',data:{target:normalizedTarget,decodedLen:decoded?.length,preview:decoded?.slice(0,30)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     setCache(text, normalizedTarget, sourceLang, decoded);
     return { text: decoded };
   }
@@ -277,6 +292,8 @@ export async function translateText(
     return { text: decoded };
   }
 
-  if (TRANSLATE_DEBUG) console.warn('[translate] All methods failed');
+  // #region agent log
+  fetch(DEBUG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':DEBUG_SESSION},body:JSON.stringify({sessionId:DEBUG_SESSION,location:'translateText.ts:allFailed',message:'All methods failed',data:{target:normalizedTarget,source:sourceLang,platform:Platform.OS,textLen:text?.length},timestamp:Date.now(),hypothesisId:'H1,H5'})}).catch(()=>{});
+  // #endregion
   return { error: 'Translation failed' };
 }
