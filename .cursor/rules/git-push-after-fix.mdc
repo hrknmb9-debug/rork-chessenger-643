@@ -1,0 +1,13 @@
+---
+description: 修正後に git push まで行う
+alwaysApply: true
+---
+
+# Git Push After Fix
+
+コードを修正したら、そのセッション内で以下を実行する：
+
+1. 変更を `git add` して `git commit`
+2. `git push` でリモートに反映
+
+コミットメッセージは変更内容を簡潔に（例: `fix(translate): 401対応の計装とanon retry追加`）。
