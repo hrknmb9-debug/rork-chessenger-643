@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   Settings,
   Share,
@@ -22,6 +22,7 @@ import {
   Clock,
   Flag,
   Star,
+  Users,
 } from 'lucide-react-native';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -29,6 +30,8 @@ import { useChess } from '@/providers/ChessProvider';
 import { t, getCountryFlag, getCountryName } from '@/utils/translations';
 import { PlayStyle } from '@/types';
 import { resolveAvatarUrl } from '@/utils/avatarUrl';
+import { SafeImage } from '@/components/SafeImage';
+import { supabase } from '@/utils/supabaseClient';
 
 const PLAY_STYLE_META: { key: PlayStyle; labelKey: string; emoji: string }[] = [
   { key: 'casual', labelKey: 'play_style_casual', emoji: '🎲' },
@@ -46,12 +49,94 @@ const SKILL_EMOJI: Record<string, string> = {
 };
 
 
+interface HostedEventWithParticipants {
+  eventId: string;
+  postId: string;
+  title: string;
+  date: string | null;
+  time: string | null;
+  participants: { id: string; name: string; avatar: string | null }[];
+}
+
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const { user, logout } = useAuth();
   const { profile, language } = useChess();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [hostedEvents, setHostedEvents] = useState<HostedEventWithParticipants[]>([]);
+  const [loadingHosted, setLoadingHosted] = useState(false);
+
+  const loadHostedEvents = useCallback(async () => {
+    if (!user?.id || !profile?.id) return;
+    setLoadingHosted(true);
+    try {
+      const { data: myPosts } = await supabase
+        .from('posts')
+        .select('id, content')
+        .eq('user_id', user.id)
+        .eq('type', 'event');
+      if (!myPosts?.length) {
+        setHostedEvents([]);
+        return;
+      }
+      const postIds = myPosts.map((p: { id: string }) => p.id);
+      const { data: eventsRows } = await supabase
+        .from('events')
+        .select('id, post_id, title, date, time')
+        .in('post_id', postIds);
+      if (!eventsRows?.length) {
+        setHostedEvents([]);
+        return;
+      }
+      const eventIds = eventsRows.map((e: { id: string }) => e.id);
+      const { data: participantsRows } = await supabase
+        .from('event_participants')
+        .select('event_id, user_id')
+        .in('event_id', eventIds);
+      const participantsByEvent = new Map<string, string[]>();
+      (participantsRows ?? []).forEach((r: { event_id: string; user_id: string }) => {
+        const arr = participantsByEvent.get(r.event_id) ?? [];
+        arr.push(r.user_id);
+        participantsByEvent.set(r.event_id, arr);
+      });
+      const allUserIds = [...new Set((participantsRows ?? []).map((r: { user_id: string }) => r.user_id))];
+      const { data: profilesRows } = allUserIds.length > 0
+        ? await supabase.from('profiles').select('id, name, avatar').in('id', allUserIds)
+        : { data: [] };
+      const profileMap = new Map<string, { name: string; avatar: string | null }>();
+      (profilesRows ?? []).forEach((p: { id: string; name: string | null; avatar: string | null }) => {
+        profileMap.set(p.id, { name: p.name ?? 'Unknown', avatar: p.avatar });
+      });
+      const result: HostedEventWithParticipants[] = eventsRows.map((ev: { id: string; post_id: string; title: string; date: string | null; time: string | null }) => {
+        const post = myPosts.find((p: { id: string }) => p.id === ev.post_id);
+        return {
+          eventId: ev.id,
+          postId: ev.post_id,
+          title: ev.title || (post as { content?: string })?.content || 'イベント',
+          date: ev.date,
+          time: ev.time,
+          participants: (participantsByEvent.get(ev.id) ?? []).map(uid => ({
+            id: uid,
+            name: profileMap.get(uid)?.name ?? 'Unknown',
+            avatar: profileMap.get(uid)?.avatar ?? null,
+          })),
+        };
+      });
+      setHostedEvents(result);
+    } catch (e) {
+      console.log('Profile: loadHostedEvents failed', e);
+      setHostedEvents([]);
+    } finally {
+      setLoadingHosted(false);
+    }
+  }, [user?.id, profile?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHostedEvents();
+    }, [loadHostedEvents])
+  );
 
   if (!user) return null;
   if (!profile) {
@@ -199,6 +284,57 @@ export default function ProfileScreen() {
             </View>
           </View>
         )}
+
+        {/* 主催イベントの参加者 */}
+        <View style={styles.hostedEventsSection}>
+          <Text style={styles.sectionTitle}>{t('hosted_event_participants', language)}</Text>
+          {loadingHosted ? (
+            <View style={styles.hostedLoading}>
+              <ActivityIndicator size="small" color={colors.accent} />
+            </View>
+          ) : hostedEvents.length === 0 ? (
+            <View style={styles.hostedEmpty}>
+              <Calendar size={32} color={colors.textMuted} />
+              <Text style={styles.hostedEmptyText}>{t('no_hosted_events', language)}</Text>
+            </View>
+          ) : (
+            hostedEvents.map(ev => (
+              <View key={ev.eventId} style={styles.hostedEventCard}>
+                <View style={styles.hostedEventHeader}>
+                  <Text style={styles.hostedEventTitle} numberOfLines={1}>{ev.title}</Text>
+                  <Text style={styles.hostedEventMeta}>
+                    {ev.date ?? '-'} {ev.time ?? ''}
+                  </Text>
+                </View>
+                <View style={styles.hostedParticipantsRow}>
+                  <Users size={14} color={colors.textMuted} />
+                  <Text style={styles.hostedParticipantsLabel}>
+                    {ev.participants.length} {t('participants', language)}
+                  </Text>
+                </View>
+                {ev.participants.length > 0 ? (
+                  <View style={styles.hostedAvatarsRow}>
+                    {ev.participants.map(p => (
+                      <Pressable
+                        key={p.id}
+                        onPress={() => router.push(`/player/${p.id}` as any)}
+                        style={styles.hostedAvatarWrap}
+                      >
+                        <SafeImage
+                          uri={resolveAvatarUrl(p.avatar, p.name)}
+                          name={p.name}
+                          style={styles.hostedAvatar}
+                          contentFit="cover"
+                        />
+                        <Text style={styles.hostedAvatarName} numberOfLines={1}>{p.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ))
+          )}
+        </View>
 
         {/* Edit Profile Button */}
         <View style={styles.actionSection}>
@@ -386,6 +522,36 @@ function createStyles(colors: any) {
       justifyContent: 'center',
     },
     editBtnText: { color: colors.background, fontWeight: '700', fontSize: 16 },
+
+    /* Hosted events participants */
+    hostedEventsSection: { marginTop: 24, paddingHorizontal: 24 },
+    hostedLoading: { paddingVertical: 24, alignItems: 'center' },
+    hostedEmpty: {
+      alignItems: 'center',
+      paddingVertical: 32,
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    hostedEmptyText: { fontSize: 14, color: colors.textMuted, marginTop: 8 },
+    hostedEventCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    hostedEventHeader: { marginBottom: 8 },
+    hostedEventTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+    hostedEventMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+    hostedParticipantsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+    hostedParticipantsLabel: { fontSize: 13, color: colors.textMuted },
+    hostedAvatarsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    hostedAvatarWrap: { alignItems: 'center', maxWidth: 64 },
+    hostedAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceHighlight },
+    hostedAvatarName: { fontSize: 11, color: colors.textSecondary, marginTop: 4, maxWidth: 64 },
 
     /* Menu */
     menuSection: { marginTop: 32, paddingHorizontal: 24 },

@@ -114,7 +114,7 @@ function PostCard({
   language: string;
 }) {
   const { colors } = useTheme();
-  const { currentUserId, joinEvent } = useChess();
+  const { currentUserId, joinEvent, leaveEvent } = useChess();
   const [showComments, setShowComments] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
   const [replyToId, setReplyToId] = useState<string | null>(null);
@@ -284,9 +284,22 @@ function PostCard({
               <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.textMuted }}>{t('event_closed', language)}</Text>
             </View>
           ) : isEventJoined ? (
-            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.greenMuted, borderWidth: 1, borderColor: colors.green }}>
-              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.green }}>{t('event_joined', language)}</Text>
-            </View>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Alert.alert(
+                  language === 'ja' ? '参加を取り消しますか？' : 'Cancel participation?',
+                  '',
+                  [
+                    { text: language === 'ja' ? 'キャンセル' : 'Cancel', style: 'cancel' },
+                    { text: language === 'ja' ? '取り消す' : 'Cancel participation', style: 'destructive', onPress: () => leaveEvent(post.id) },
+                  ]
+                );
+              }}
+              style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.divider }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.textSecondary }}>{t('cancel_participation', language)}</Text>
+            </Pressable>
           ) : (
             <Pressable
               onPress={() => {
@@ -387,7 +400,7 @@ export default function TimelineScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { timelinePosts, toggleLike, addComment, addTimelinePost, deleteTimelinePost, language, refreshPlayers, refreshTimeline, activeUsersCount, currentUserId } = useChess();
   const router = useRouter();
-  const [filter, setFilter] = useState<'all' | 'events'>('all');
+  const [filter, setFilter] = useState<'all' | 'events' | 'my'>('all');
   const [newPostText, setNewPostText] = useState<string>('');
   const [showComposer, setShowComposer] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -412,10 +425,16 @@ export default function TimelineScreen() {
   const [showDeadlineTimePicker, setShowDeadlineTimePicker] = useState<boolean>(false);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
 
-  const filteredPosts = useMemo(
-    () => (filter === 'all' ? timelinePosts : timelinePosts.filter(p => p.type === 'event')),
-    [filter, timelinePosts]
-  );
+  const filteredPosts = useMemo(() => {
+    if (filter === 'my') {
+      const uid = currentUserId ?? 'me';
+      return timelinePosts.filter(p => p.author.id === uid).sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
+    if (filter === 'events') return timelinePosts.filter(p => p.type === 'event');
+    return timelinePosts;
+  }, [filter, timelinePosts, currentUserId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -635,6 +654,14 @@ export default function TimelineScreen() {
         >
           <Text style={[styles.filterTabText, filter === 'events' && styles.filterTabTextActive]}>
             {language === 'ja' ? 'イベントのみ' : 'Events only'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setFilter('my')}
+          style={[styles.filterTab, filter === 'my' && styles.filterTabActive]}
+        >
+          <Text style={[styles.filterTabText, filter === 'my' && styles.filterTabTextActive]}>
+            {language === 'ja' ? 'My' : 'My'}
           </Text>
         </Pressable>
       </View>
