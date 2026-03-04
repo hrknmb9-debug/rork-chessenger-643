@@ -2,7 +2,7 @@
  * テキスト翻訳ユーティリティ
  * Supabase Edge Function または MyMemory 無料API を使用
  * 翻訳結果は AsyncStorage にキャッシュし API クォータを節約
- * iOS環境での fetch/UTF-8 問題に対応
+ * iOS環境での fetch/UTF-8 問題に対応（XMLHttpRequest + arraybuffer 使用）
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,7 +11,7 @@ import { supabase } from '@/utils/supabaseClient';
 
 const TRANSLATE_CACHE_KEY = 'chess_translate_cache';
 const CACHE_MAX_ENTRIES = 500;
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const TRANSLATE_DEBUG = __DEV__;
 
 export type TranslateResult = { text: string } | { error: string };
@@ -21,10 +21,6 @@ function safeDecodeTranslated(text: string): string {
   if (!text || typeof text !== 'string') return text;
   let s = text.trim();
   if (s.length === 0) return text;
-  // #region agent log
-  const matchPercent = /%[0-9A-Fa-f]{2}/.test(s) || /%\s*[0-9A-Fa-f]/.test(s);
-  fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'H3',location:'translateText.ts:safeDecodeTranslated',message:'safeDecode input',data:{inputPreview:s.slice(0,80),matchPercent,len:s.length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   try {
     // %XX 形式（スペース混入含む）をデコード：iOSで %E 3% 81% のような形式になることがある
     if (/%[0-9A-Fa-f]{2}/.test(s) || /%\s*[0-9A-Fa-f]/.test(s)) {
@@ -39,19 +35,11 @@ function safeDecodeTranslated(text: string): string {
             // 二重デコード失敗時は1回目を返す
           }
         }
-        if (decoded && decoded.length > 0) {
-          // #region agent log
-          fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'H3',location:'translateText.ts:safeDecodeTranslated',message:'decoded output',data:{outputPreview:decoded.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          return decoded;
-        }
+        if (decoded && decoded.length > 0) return decoded;
       }
     }
     if (/\uFFFD/.test(s)) return s.replace(/\uFFFD/g, '');
-  } catch (e) {
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'H3',location:'translateText.ts:safeDecodeTranslated',message:'decode failed',data:{err:String(e),inputPreview:s.slice(0,60)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+  } catch {
     // デコード失敗時は元の文字列を返す
   }
   return text;
@@ -140,27 +128,116 @@ async function setCache(text: string, target: string, source: string, translated
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+/** ArrayBuffer を UTF-8 文字列にデコード（TextDecoder が無い環境のフォールバック） */
+function decodeUtf8FromBuffer(buf: ArrayBuffer): string {
+  if (typeof TextDecoder !== 'undefined') {
+    return new TextDecoder('utf-8').decode(buf);
+  }
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  let i = 0;
+  while (i < bytes.length) {
+    const b = bytes[i];
+    if (b < 128) {
+      s += String.fromCharCode(b);
+      i++;
+    } else if ((b & 0xe0) === 0xc0 && i + 1 < bytes.length) {
+      s += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i + 1]! & 0x3f));
+      i += 2;
+    } else if ((b & 0xf0) === 0xe0 && i + 2 < bytes.length) {
+      s += String.fromCharCode(((b & 0x0f) << 12) | ((bytes[i + 1]! & 0x3f) << 6) | (bytes[i + 2]! & 0x3f));
+      i += 3;
+    } else if ((b & 0xf8) === 0xf0 && i + 3 < bytes.length) {
+      s += String.fromCodePoint(((b & 0x07) << 18) | ((bytes[i + 1]! & 0x3f) << 12) | ((bytes[i + 2]! & 0x3f) << 6) | (bytes[i + 3]! & 0x3f));
+      i += 4;
+    } else {
+      s += String.fromCharCode(b);
+      i++;
+    }
+  }
+  return s;
+}
+
 /**
- * fetch レスポンスを UTF-8 で確実にパース（RN iOS の res.text/res.json インクリメンタルデコード不具合対策）
- * 全プラットフォームで arrayBuffer + TextDecoder を優先して一貫性を確保
+ * XMLHttpRequest で arraybuffer 取得 → UTF-8 デコード → JSON パース
+ * RN iOS: fetch の arrayBuffer() が UTF-8 マルチバイトで不具合があるため XHR を優先
+ */
+function xhrPostJson(
+  url: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string>
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> | null }> {
+  return new Promise((resolve) => {
+    const req = new XMLHttpRequest();
+    req.open('POST', url, true);
+    req.responseType = 'arraybuffer';
+    req.setRequestHeader('Content-Type', 'application/json');
+    Object.entries(headers).forEach(([k, v]) => req.setRequestHeader(k, v));
+    req.onload = () => {
+      try {
+        const buf = req.response as ArrayBuffer | null;
+        if (!buf || buf.byteLength === 0) {
+          resolve({ ok: req.status >= 200 && req.status < 300, status: req.status, data: null });
+          return;
+        }
+        const rawText = decodeUtf8FromBuffer(buf);
+        if (!rawText?.trim()) {
+          resolve({ ok: req.status >= 200 && req.status < 300, status: req.status, data: null });
+          return;
+        }
+        const data = JSON.parse(rawText) as Record<string, unknown>;
+        resolve({ ok: req.status >= 200 && req.status < 300, status: req.status, data });
+      } catch {
+        resolve({ ok: false, status: req.status, data: null });
+      }
+    };
+    req.onerror = () => resolve({ ok: false, status: 0, data: null });
+    req.send(JSON.stringify(body));
+  });
+}
+
+/**
+ * XMLHttpRequest で GET → arraybuffer 取得 → UTF-8 デコード → JSON パース
+ */
+function xhrGetJson(url: string): Promise<{ ok: boolean; data: Record<string, unknown> | null }> {
+  return new Promise((resolve) => {
+    const req = new XMLHttpRequest();
+    req.open('GET', url, true);
+    req.responseType = 'arraybuffer';
+    req.onload = () => {
+      try {
+        const buf = req.response as ArrayBuffer | null;
+        if (!buf || buf.byteLength === 0) {
+          resolve({ ok: req.status >= 200 && req.status < 300, data: null });
+          return;
+        }
+        const rawText = decodeUtf8FromBuffer(buf);
+        if (!rawText?.trim()) {
+          resolve({ ok: req.status >= 200 && req.status < 300, data: null });
+          return;
+        }
+        const data = JSON.parse(rawText) as Record<string, unknown>;
+        resolve({ ok: req.status >= 200 && req.status < 300, data });
+      } catch {
+        resolve({ ok: false, data: null });
+      }
+    };
+    req.onerror = () => resolve({ ok: false, data: null });
+    req.send();
+  });
+}
+
+/**
+ * fetch レスポンスを UTF-8 でパース（Web/Android 用、arrayBuffer + TextDecoder）
+ * iOS では xhrPostJson / xhrGetJson を直接使うため呼ばれない
  */
 async function parseJsonFromResponse(res: Response): Promise<Record<string, unknown> | null> {
   try {
     const buf = await res.arrayBuffer();
-    const rawText = new TextDecoder('utf-8').decode(buf);
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'H1,H2',location:'translateText.ts:parseJsonFromResponse',message:'arrayBuffer+TextDecoder result',data:{platform:Platform.OS,bufLen:buf.byteLength,rawLen:rawText?.length,rawPreview:rawText?.slice(0,120),hasPercent:rawText?.includes('%'),hasFFFD:rawText?.includes('\uFFFD')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (TRANSLATE_DEBUG) {
-      console.log('[translate] response status:', res.status, 'body length:', rawText?.length, 'preview:', rawText?.slice(0, 80));
-    }
+    const rawText = decodeUtf8FromBuffer(buf);
+    if (TRANSLATE_DEBUG) console.log('[translate] response status:', res.status, 'body length:', rawText?.length);
     if (!rawText?.trim()) return null;
-    const parsed = JSON.parse(rawText) as Record<string, unknown>;
-    const raw = (parsed.translatedText ?? parsed.text) as string | undefined;
-    // #region agent log
-    if(raw&&typeof raw==='string') fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'H5',location:'translateText.ts:parseJsonFromResponse',message:'JSON parsed translatedText',data:{parsedPreview:raw.slice(0,100),hasPercent:raw.includes('%')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return parsed;
+    return JSON.parse(rawText) as Record<string, unknown>;
   } catch (e) {
     if (TRANSLATE_DEBUG) console.warn('[translate] JSON parse failed:', e);
     return null;
@@ -186,17 +263,32 @@ async function translateViaEdgeFunction(
 
   const doFetch = async (): Promise<TranslateResult | null> => {
     try {
+      const url = `${SUPABASE_URL}/functions/v1/translate`;
+      const body = { text, targetLang, sourceLang };
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         Accept: 'application/json',
         Authorization: `Bearer ${token}`,
       };
-      const bodyStr = JSON.stringify({ text, targetLang, sourceLang });
-      if (TRANSLATE_DEBUG) console.log('[translate] POST', SUPABASE_URL + '/functions/v1/translate', 'target:', targetLang, 'len:', text.length);
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/translate`, {
+      if (TRANSLATE_DEBUG) console.log('[translate] POST', url, 'target:', targetLang, 'len:', text.length);
+      if (Platform.OS === 'ios') {
+        const { ok, status, data } = await xhrPostJson(url, body, headers);
+        if (!ok || !data) {
+          if (TRANSLATE_DEBUG) console.warn('[translate] XHR failed or empty', status);
+          return null;
+        }
+        const err = data.error as string | undefined;
+        if (err) {
+          if (TRANSLATE_DEBUG) console.warn('[translate] API error:', err);
+          return null;
+        }
+        const raw = (data.translatedText ?? data.text) as string | undefined;
+        if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
+        return null;
+      }
+      const res = await fetch(url, {
         method: 'POST',
-        headers,
-        body: bodyStr,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
       const data = await parseJsonFromResponse(res);
       if (!data) {
@@ -209,10 +301,7 @@ async function translateViaEdgeFunction(
         return null;
       }
       const raw = (data.translatedText ?? data.text) as string | undefined;
-      if (raw && typeof raw === 'string') {
-        return { text: safeDecodeTranslated(raw) };
-      }
-      if (TRANSLATE_DEBUG) console.warn('[translate] No translatedText in response');
+      if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
       return null;
     } catch (e) {
       if (TRANSLATE_DEBUG) console.warn('[translate] fetch failed:', e);
@@ -253,6 +342,13 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
     const langpair = `${sourceLang}|${targetLang}`;
     const encoded = encodeURIComponent(text.slice(0, 500));
     const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`;
+    if (Platform.OS === 'ios') {
+      const { ok, data } = await xhrGetJson(url);
+      if (!ok || !data) return null;
+      const raw = data?.responseData?.translatedText as string | undefined;
+      if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
+      return null;
+    }
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await parseJsonFromResponse(res);
@@ -285,18 +381,10 @@ export async function translateText(
   }
 
   const cached = await getCached(text, normalizedTarget, sourceLang);
-  if (cached) {
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'H4',location:'translateText.ts:translateText',message:'cache hit',data:{cachedPreview:cached.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return { text: safeDecodeTranslated(cached) };
-  }
+  if (cached) return { text: safeDecodeTranslated(cached) };
 
   const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang, accessToken);
   if (viaEdge && 'text' in viaEdge) {
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'source',location:'translateText.ts:translateText',message:'via Edge',data:{platform:Platform.OS,resultPreview:viaEdge.text?.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const decoded = safeDecodeTranslated(viaEdge.text);
     setCache(text, normalizedTarget, sourceLang, decoded);
     return { text: decoded };
@@ -305,9 +393,6 @@ export async function translateText(
   if (TRANSLATE_DEBUG) console.log('[translate] Edge failed, trying MyMemory');
   const viaMyMemory = await translateViaMyMemory(text, normalizedTarget, sourceLang);
   if (viaMyMemory && 'text' in viaMyMemory) {
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'74b48e'},body:JSON.stringify({sessionId:'74b48e',hypothesisId:'source',location:'translateText.ts:translateText',message:'via MyMemory',data:{platform:Platform.OS,resultPreview:viaMyMemory.text?.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const decoded = safeDecodeTranslated(viaMyMemory.text);
     setCache(text, normalizedTarget, sourceLang, decoded);
     return { text: decoded };
