@@ -47,7 +47,7 @@ import { TimelinePost, TimelineComment, TimelineEvent } from '@/types';
 import { t, getTimeAgo, isRTL } from '@/utils/translations';
 import { uploadTimelineImage } from '@/utils/messageImageUpload';
 import { supabase } from '@/utils/supabaseClient';
-import { translateText, getTargetLanguage } from '@/utils/translateText';
+import { translateText, getTargetLanguage, decodeForDisplay } from '@/utils/translateText';
 
 const TEMPLATES = [
   { key: 'beginner', labelKey: 'template_beginner' },
@@ -82,7 +82,7 @@ function CommentItem({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const result = await translateText(commentText, getTargetLanguage(language), session?.access_token);
-      if ('text' in result) setTranslated(result.text);
+      if ('text' in result) setTranslated(decodeForDisplay(result.text));
     } finally {
       setTranslating(false);
     }
@@ -200,7 +200,7 @@ function PostCard({
       const { data: { session } } = await supabase.auth.getSession();
       const targetLang = getTargetLanguage(language);
       const result = await translateText(contentText, targetLang, session?.access_token);
-      if ('text' in result) setTranslatedContent(result.text);
+      if ('text' in result) setTranslatedContent(decodeForDisplay(result.text));
     } catch {
       // ignore
     } finally {
@@ -215,9 +215,6 @@ function PostCard({
       setTranslatedEventLocation(null);
       return;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'034d9e'},body:JSON.stringify({sessionId:'034d9e',location:'timeline:eventTranslateEffect',message:'Event translate effect run',data:{targetLang,language,eventId:post.event?.id,hasTitle:!!post.event?.title?.trim()},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     setTranslatedEventTitle(null);
     setTranslatedEventLocation(null);
     let cancelled = false;
@@ -226,11 +223,11 @@ function PostCard({
       const token = session?.access_token;
       if (post.event?.title?.trim()) {
         const r = await translateText(post.event.title, targetLang, token);
-        if (!cancelled && 'text' in r) setTranslatedEventTitle(r.text);
+        if (!cancelled && 'text' in r) setTranslatedEventTitle(decodeForDisplay(r.text));
       }
       if (post.event?.location?.trim()) {
         const r = await translateText(post.event.location, targetLang, token);
-        if (!cancelled && 'text' in r) setTranslatedEventLocation(r.text);
+        if (!cancelled && 'text' in r) setTranslatedEventLocation(decodeForDisplay(r.text));
       }
     };
     run();

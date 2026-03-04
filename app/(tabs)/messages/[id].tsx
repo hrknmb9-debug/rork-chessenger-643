@@ -39,7 +39,7 @@ import {
   decodeMessageContent,
   isLoadableImageUrl,
 } from '@/utils/messageImageUpload';
-import { translateText, getTargetLanguage } from '@/utils/translateText';
+import { translateText, getTargetLanguage, decodeForDisplay } from '@/utils/translateText';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -268,13 +268,13 @@ function MessageBubble({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const result = await translateText(item.text, getTargetLanguage(language), session?.access_token);
-      if ('text' in result) setTranslatedText(result.text);
+      if ('text' in result) setTranslatedText(decodeForDisplay(result.text));
     } finally {
       setIsTranslating(false);
     }
   }, [hasTranslatableText, item.text, language, translatedText, isTranslating]);
 
-  const displayText = translatedText ?? item.text;
+  const displayText = translatedText != null ? decodeForDisplay(translatedText) : item.text;
 
   const reactionGroups = useMemo(() => {
     const map: Record<string, number> = {};

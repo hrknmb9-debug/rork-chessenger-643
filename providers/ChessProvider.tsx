@@ -1304,9 +1304,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   refreshTimelineRef.current = refreshTimeline;
 
   const changeLanguage = useCallback(async (lang: Language) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'034d9e'},body:JSON.stringify({sessionId:'034d9e',location:'ChessProvider:changeLanguage',message:'changeLanguage called',data:{lang},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     setLanguage(lang);
     try {
       await AsyncStorage.setItem(LANGUAGE_KEY, lang);

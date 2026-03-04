@@ -197,20 +197,14 @@ export default function PlayerDetailScreen() {
           <Text style={styles.userName}>{player.name}</Text>
 
           <View style={styles.metaRow}>
-            {(player.location || player.distance !== undefined) && (
+            {(player.location || player.distance !== undefined || countryDisplay) && (
               <View style={styles.metaChip}>
                 <MapPin size={13} color={colors.textMuted} />
                 <Text style={styles.metaChipText}>
-                  {[player.location, formatDistance(player.distance)].filter(Boolean).join(' · ')}
+                  {[player.location, formatDistance(player.distance), countryDisplay ?? undefined].filter(Boolean).join(' · ')}
                 </Text>
               </View>
             )}
-            {countryDisplay ? (
-              <View style={styles.metaChip}>
-                <Flag size={13} color={colors.textMuted} />
-                <Text style={styles.metaChipText}>{countryDisplay}</Text>
-              </View>
-            ) : null}
           </View>
 
           {player.bioEn ? (

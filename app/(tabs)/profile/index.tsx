@@ -204,21 +204,15 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>{profile.name || user.name}</Text>
           <Text style={styles.userHandle}>@{user.email.split('@')[0]}</Text>
 
-          {/* Location + Country row */}
+          {/* Location + Country：1つのチップに集約（重複表示を防止） */}
           {(profile.location || countryDisplay) && (
             <View style={styles.metaRow}>
-              {profile.location ? (
-                <View style={styles.metaChip}>
-                  <MapPin size={13} color={colors.textMuted} />
-                  <Text style={styles.metaChipText}>{profile.location}</Text>
-                </View>
-              ) : null}
-              {countryDisplay ? (
-                <View style={styles.metaChip}>
-                  <Flag size={13} color={colors.textMuted} />
-                  <Text style={styles.metaChipText}>{countryDisplay}</Text>
-                </View>
-              ) : null}
+              <View style={styles.metaChip}>
+                <MapPin size={13} color={colors.textMuted} />
+                <Text style={styles.metaChipText}>
+                  {[profile.location, countryDisplay].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
             </View>
           )}
 

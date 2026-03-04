@@ -7,7 +7,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { ThemeColors } from '@/constants/colors';
 import { Player, PlayStyle } from '@/types';
 import { getSkillLabel, getSkillColor, getSkillBgColor, formatDistance, formatRating } from '@/utils/helpers';
-import { Language, t, getLanguageFlag } from '@/utils/translations';
+import { Language, t, getLanguageFlag, getCountryFlag, getCountryName } from '@/utils/translations';
 import { SafeImage } from '@/components/SafeImage';
 
 interface PlayerCardProps {
@@ -116,6 +116,11 @@ function PlayerCardComponent({ player, onPress, language = 'ja' }: PlayerCardPro
             <MapPin size={13} color={colors.blue} />
             <Text style={styles.footerTextDistance}>{formatDistance(player.distance)}</Text>
           </View>
+          {player.country ? (
+            <View style={styles.footerItem}>
+              <Text style={styles.footerText}>{getCountryFlag(player.country)} {getCountryName(player.country, language)}</Text>
+            </View>
+          ) : null}
           <View style={styles.footerItem}>
             <Clock size={13} color={colors.textMuted} />
             <Text style={styles.footerText}>{player.preferredTimeControl}</Text>
