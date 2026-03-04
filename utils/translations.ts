@@ -55,6 +55,7 @@ const JA: Record<string, string> = {
   confirmed_matches: '確定済み',
   sent_requests: '送信済み',
   match_history: '対局履歴',
+  matches: '対局',
   languages: '対応言語',
   login: 'ログイン',
   register: '新規登録',
@@ -441,6 +442,7 @@ const EN: Record<string, string> = {
   confirmed_matches: 'Confirmed',
   sent_requests: 'Sent',
   match_history: 'Match History',
+  matches: 'Matches',
   languages: 'Languages',
   login: 'Login',
   register: 'Sign Up',
@@ -772,16 +774,16 @@ const EN: Record<string, string> = {
 
 /** 12言語のみ（SUPPORTED_LANGUAGESと一致） */
 const EXTRA_LANGS: Record<string, Record<string, string>> = {
-  zh: { tab_search: '搜索', tab_timeline: '时间线', tab_messages: '消息', tab_matches: '对局', tab_profile: '个人资料', login: '登录', register: '注册', settings: '设置', save: '保存', cancel: '取消', send: '发送', back: '返回', logout: '退出登录', beginner: '初学者', intermediate: '中级', advanced: '高级', expert: '专家', online: '在线', post: '发帖', comment: '评论', like: '点赞', reply: '回复', messages: '消息', notifications: '通知' },
-  hi: { tab_search: 'खोजें', tab_timeline: 'टाइमलाइन', tab_messages: 'संदेश', tab_matches: 'मैच', tab_profile: 'प्रोफ़ाइल', login: 'लॉगिन', register: 'रजिस्टर', settings: 'सेटिंग्स', save: 'सेव', cancel: 'रद्द', send: 'भेजें', back: 'वापस', logout: 'लॉगआउट', online: 'ऑनलाइन', post: 'पोस्ट', comment: 'टिप्पणी', like: 'पसंद', reply: 'जवाब', messages: 'संदेश', notifications: 'सूचनाएं' },
-  es: { tab_search: 'Buscar', tab_timeline: 'Línea', tab_messages: 'Mensajes', tab_matches: 'Partidas', tab_profile: 'Perfil', login: 'Iniciar sesión', register: 'Registrarse', settings: 'Ajustes', save: 'Guardar', cancel: 'Cancelar', send: 'Enviar', back: 'Volver', logout: 'Cerrar sesión', beginner: 'Principiante', intermediate: 'Intermedio', advanced: 'Avanzado', expert: 'Experto', online: 'En línea', post: 'Publicar', comment: 'Comentar', like: 'Me gusta', reply: 'Responder', messages: 'Mensajes', notifications: 'Notificaciones' },
-  ar: { tab_search: 'بحث', tab_timeline: 'الجدول', tab_messages: 'رسائل', tab_matches: 'مباريات', tab_profile: 'الملف', login: 'تسجيل الدخول', register: 'تسجيل', settings: 'الإعدادات', save: 'حفظ', cancel: 'إلغاء', send: 'إرسال', back: 'رجوع', logout: 'تسجيل الخروج', online: 'متصل', post: 'نشر', comment: 'تعليق', like: 'إعجاب', reply: 'رد', messages: 'رسائل', notifications: 'إشعارات' },
-  fr: { tab_search: 'Recherche', tab_timeline: 'Fil', tab_messages: 'Messages', tab_matches: 'Matchs', tab_profile: 'Profil', login: 'Connexion', register: "S'inscrire", settings: 'Paramètres', save: 'Sauvegarder', cancel: 'Annuler', send: 'Envoyer', back: 'Retour', logout: 'Déconnexion', beginner: 'Débutant', intermediate: 'Intermédiaire', advanced: 'Avancé', expert: 'Expert', online: 'En ligne', post: 'Publier', comment: 'Commenter', like: 'Aimer', reply: 'Répondre', messages: 'Messages', notifications: 'Notifications' },
-  bn: { tab_search: 'অনুসন্ধান', tab_timeline: 'টাইমলাইন', tab_messages: 'বার্তা', tab_matches: 'ম্যাচ', tab_profile: 'প্রোফাইল', login: 'লগইন', register: 'নিবন্ধন', settings: 'সেটিংস', save: 'সংরক্ষণ', cancel: 'বাতিল', send: 'পাঠান', back: 'ফিরে', logout: 'লগআউট', online: 'অনলাইন', post: 'পোস্ট', comment: 'মন্তব্য', like: 'পছন্দ', reply: 'উত্তর', messages: 'বার্তা', notifications: 'বিজ্ঞপ্তি', participants: 'অংশগ্রহণকারী', event_deadline: 'নিবন্ধনের শেষ তারিখ', event_closed: 'এই ইভেন্টটি বন্ধ', join_event: 'যোগ দিন', cancel_participation: 'অংশগ্রহণ বাতিল', cancel_participation_confirm: 'অংশগ্রহণ বাতিল করবেন?', translate: 'অনুবাদ', original: 'মূল', translating: 'অনুবাদ করা হচ্ছে...', translated_by_ai: '(AI দ্বারা অনুবাদ)' },
-  pt: { tab_search: 'Buscar', tab_timeline: 'Timeline', tab_messages: 'Mensagens', tab_matches: 'Partidas', tab_profile: 'Perfil', login: 'Entrar', register: 'Cadastrar', settings: 'Configurações', save: 'Salvar', cancel: 'Cancelar', send: 'Enviar', back: 'Voltar', logout: 'Sair', beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado', expert: 'Especialista', online: 'Online', post: 'Publicar', comment: 'Comentar', like: 'Curtir', reply: 'Responder', messages: 'Mensagens', notifications: 'Notificações' },
-  ru: { tab_search: 'Поиск', tab_timeline: 'Лента', tab_messages: 'Сообщения', tab_matches: 'Матчи', tab_profile: 'Профиль', login: 'Войти', register: 'Регистрация', settings: 'Настройки', save: 'Сохранить', cancel: 'Отмена', send: 'Отправить', back: 'Назад', logout: 'Выйти', beginner: 'Начинающий', intermediate: 'Средний', advanced: 'Продвинутый', expert: 'Эксперт', online: 'Онлайн', post: 'Опубликовать', comment: 'Комментарий', like: 'Нравится', reply: 'Ответить', messages: 'Сообщения', notifications: 'Уведомления' },
-  id: { tab_search: 'Cari', tab_timeline: 'Linimasa', tab_messages: 'Pesan', tab_matches: 'Pertandingan', tab_profile: 'Profil', login: 'Masuk', register: 'Daftar', settings: 'Pengaturan', save: 'Simpan', cancel: 'Batal', send: 'Kirim', back: 'Kembali', logout: 'Keluar', online: 'Online', post: 'Posting', comment: 'Komentar', like: 'Suka', reply: 'Balas', messages: 'Pesan', notifications: 'Notifikasi' },
-  ko: { tab_search: '검색', tab_timeline: '타임라인', tab_messages: '메시지', tab_matches: '매치', tab_profile: '프로필', login: '로그인', register: '회원가입', settings: '설정', save: '저장', cancel: '취소', send: '보내기', back: '뒤로', logout: '로그아웃', beginner: '초급', intermediate: '중급', advanced: '고급', expert: '전문가', online: '온라인', post: '게시', comment: '댓글', like: '좋아요', reply: '답글', messages: '메시지', notifications: '알림' },
+  zh: { tab_search: '搜索', tab_timeline: '时间线', tab_messages: '消息', tab_matches: '对局', tab_profile: '个人资料', login: '登录', register: '注册', settings: '设置', save: '保存', cancel: '取消', send: '发送', back: '返回', logout: '退出登录', beginner: '初学者', intermediate: '中级', advanced: '高级', expert: '专家', online: '在线', post: '发帖', comment: '评论', like: '点赞', reply: '回复', messages: '消息', notifications: '通知', matches: '对局', translate: '翻译', original: '原文', translating: '翻译中...', translated_by_ai: '（AI翻译）' },
+  hi: { tab_search: 'खोजें', tab_timeline: 'टाइमलाइन', tab_messages: 'संदेश', tab_matches: 'मैच', tab_profile: 'प्रोफ़ाइल', login: 'लॉगिन', register: 'रजिस्टर', settings: 'सेटिंग्स', save: 'सेव', cancel: 'रद्द', send: 'भेजें', back: 'वापस', logout: 'लॉगआउट', online: 'ऑनलाइन', post: 'पोस्ट', comment: 'टिप्पणी', like: 'पसंद', reply: 'जवाब', messages: 'संदेश', notifications: 'सूचनाएं', matches: 'मैच', translate: 'अनुवाद', original: 'मूल', translating: 'अनुवाद हो रहा है...', translated_by_ai: '（AI द्वारा अनुवादित）' },
+  es: { tab_search: 'Buscar', tab_timeline: 'Línea', tab_messages: 'Mensajes', tab_matches: 'Partidas', tab_profile: 'Perfil', login: 'Iniciar sesión', register: 'Registrarse', settings: 'Ajustes', save: 'Guardar', cancel: 'Cancelar', send: 'Enviar', back: 'Volver', logout: 'Cerrar sesión', beginner: 'Principiante', intermediate: 'Intermedio', advanced: 'Avanzado', expert: 'Experto', online: 'En línea', post: 'Publicar', comment: 'Comentar', like: 'Me gusta', reply: 'Responder', messages: 'Mensajes', notifications: 'Notificaciones', matches: 'Partidas', translate: 'Traducir', original: 'Original', translating: 'Traduciendo...', translated_by_ai: '(Traducido por IA)' },
+  ar: { tab_search: 'بحث', tab_timeline: 'الجدول', tab_messages: 'رسائل', tab_matches: 'مباريات', tab_profile: 'الملف', login: 'تسجيل الدخول', register: 'تسجيل', settings: 'الإعدادات', save: 'حفظ', cancel: 'إلغاء', send: 'إرسال', back: 'رجوع', logout: 'تسجيل الخروج', online: 'متصل', post: 'نشر', comment: 'تعليق', like: 'إعجاب', reply: 'رد', messages: 'رسائل', notifications: 'إشعارات', matches: 'مباريات', translate: 'ترجمة', original: 'أصلي', translating: 'جاري الترجمة...', translated_by_ai: '(ترجمة بالذكاء الاصطناعي)' },
+  fr: { tab_search: 'Recherche', tab_timeline: 'Fil', tab_messages: 'Messages', tab_matches: 'Matchs', tab_profile: 'Profil', login: 'Connexion', register: "S'inscrire", settings: 'Paramètres', save: 'Sauvegarder', cancel: 'Annuler', send: 'Envoyer', back: 'Retour', logout: 'Déconnexion', beginner: 'Débutant', intermediate: 'Intermédiaire', advanced: 'Avancé', expert: 'Expert', online: 'En ligne', post: 'Publier', comment: 'Commenter', like: 'Aimer', reply: 'Répondre', messages: 'Messages', notifications: 'Notifications', matches: 'Matchs', translate: 'Traduire', original: 'Original', translating: 'Traduction...', translated_by_ai: '(Traduit par IA)' },
+  bn: { tab_search: 'অনুসন্ধান', tab_timeline: 'টাইমলাইন', tab_messages: 'বার্তা', tab_matches: 'ম্যাচ', tab_profile: 'প্রোফাইল', login: 'লগইন', register: 'নিবন্ধন', settings: 'সেটিংস', save: 'সংরক্ষণ', cancel: 'বাতিল', send: 'পাঠান', back: 'ফিরে', logout: 'লগআউট', online: 'অনলাইন', post: 'পোস্ট', comment: 'মন্তব্য', like: 'পছন্দ', reply: 'উত্তর', messages: 'বার্তা', notifications: 'বিজ্ঞপ্তি', matches: 'ম্যাচ', participants: 'অংশগ্রহণকারী', event_deadline: 'নিবন্ধনের শেষ তারিখ', event_closed: 'এই ইভেন্টটি বন্ধ', join_event: 'যোগ দিন', cancel_participation: 'অংশগ্রহণ বাতিল', cancel_participation_confirm: 'অংশগ্রহণ বাতিল করবেন?', translate: 'অনুবাদ', original: 'মূল', translating: 'অনুবাদ করা হচ্ছে...', translated_by_ai: '(AI দ্বারা অনুবাদ)' },
+  pt: { tab_search: 'Buscar', tab_timeline: 'Timeline', tab_messages: 'Mensagens', tab_matches: 'Partidas', tab_profile: 'Perfil', login: 'Entrar', register: 'Cadastrar', settings: 'Configurações', save: 'Salvar', cancel: 'Cancelar', send: 'Enviar', back: 'Voltar', logout: 'Sair', beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado', expert: 'Especialista', online: 'Online', post: 'Publicar', comment: 'Comentar', like: 'Curtir', reply: 'Responder', messages: 'Mensagens', notifications: 'Notificações', matches: 'Partidas', translate: 'Traduzir', original: 'Original', translating: 'Traduzindo...', translated_by_ai: '(Traduzido por IA)' },
+  ru: { tab_search: 'Поиск', tab_timeline: 'Лента', tab_messages: 'Сообщения', tab_matches: 'Матчи', tab_profile: 'Профиль', login: 'Войти', register: 'Регистрация', settings: 'Настройки', save: 'Сохранить', cancel: 'Отмена', send: 'Отправить', back: 'Назад', logout: 'Выйти', beginner: 'Начинающий', intermediate: 'Средний', advanced: 'Продвинутый', expert: 'Эксперт', online: 'Онлайн', post: 'Опубликовать', comment: 'Комментарий', like: 'Нравится', reply: 'Ответить', messages: 'Сообщения', notifications: 'Уведомления', matches: 'Матчи', translate: 'Перевести', original: 'Оригинал', translating: 'Перевод...', translated_by_ai: '(Переведено ИИ)' },
+  id: { tab_search: 'Cari', tab_timeline: 'Linimasa', tab_messages: 'Pesan', tab_matches: 'Pertandingan', tab_profile: 'Profil', login: 'Masuk', register: 'Daftar', settings: 'Pengaturan', save: 'Simpan', cancel: 'Batal', send: 'Kirim', back: 'Kembali', logout: 'Keluar', online: 'Online', post: 'Posting', comment: 'Komentar', like: 'Suka', reply: 'Balas', messages: 'Pesan', notifications: 'Notifikasi', matches: 'Pertandingan', translate: 'Terjemahkan', original: 'Asli', translating: 'Menerjemahkan...', translated_by_ai: '(Diterjemahkan oleh AI)' },
+  ko: { tab_search: '검색', tab_timeline: '타임라인', tab_messages: '메시지', tab_matches: '매치', tab_profile: '프로필', login: '로그인', register: '회원가입', settings: '설정', save: '저장', cancel: '취소', send: '보내기', back: '뒤로', logout: '로그아웃', beginner: '초급', intermediate: '중급', advanced: '고급', expert: '전문가', online: '온라인', post: '게시', comment: '댓글', like: '좋아요', reply: '답글', messages: '메시지', notifications: '알림', matches: '매치', translate: '번역', original: '원문', translating: '번역 중...', translated_by_ai: '(AI 번역)' },
 };
 
 const UI_TRANSLATIONS: Record<string, Record<string, string>> = {
@@ -836,20 +838,30 @@ export function getLanguageName(lang: string): string {
   return lang;
 }
 
+/** 複数国がカンマ区切りで格納されている場合、最初の1国のみを返す（2カ国表示バグ対策） */
+function getFirstCountry(country: string | undefined | null): string {
+  if (!country || typeof country !== 'string') return '';
+  const first = country.split(/[,，、]/)[0]?.trim();
+  return first ?? country;
+}
+
+const COUNTRY_FLAG_MAP: Record<string, string> = {
+  japan: '🇯🇵', usa: '🇺🇸', uk: '🇬🇧', france: '🇫🇷', china: '🇨🇳', korea: '🇰🇷',
+  germany: '🇩🇪', spain: '🇪🇸', brazil: '🇧🇷', russia: '🇷🇺', india: '🇮🇳',
+  canada: '🇨🇦', australia: '🇦🇺', italy: '🇮🇹', mexico: '🇲🇽', indonesia: '🇮🇩',
+  thailand: '🇹🇭', vietnam: '🇻🇳', turkey: '🇹🇷', netherlands: '🇳🇱', sweden: '🇸🇪',
+  poland: '🇵🇱', argentina: '🇦🇷', egypt: '🇪🇬', philippines: '🇵🇭', malaysia: '🇲🇾',
+  singapore: '🇸🇬', norway: '🇳🇴', denmark: '🇩🇰', finland: '🇫🇮',
+};
+
 export function getCountryFlag(country: string): string {
-  const map: Record<string, string> = {
-    japan: '🇯🇵', usa: '🇺🇸', uk: '🇬🇧', france: '🇫🇷', china: '🇨🇳', korea: '🇰🇷',
-    germany: '🇩🇪', spain: '🇪🇸', brazil: '🇧🇷', russia: '🇷🇺', india: '🇮🇳',
-    canada: '🇨🇦', australia: '🇦🇺', italy: '🇮🇹', mexico: '🇲🇽', indonesia: '🇮🇩',
-    thailand: '🇹🇭', vietnam: '🇻🇳', turkey: '🇹🇷', netherlands: '🇳🇱', sweden: '🇸🇪',
-    poland: '🇵🇱', argentina: '🇦🇷', egypt: '🇪🇬', philippines: '🇵🇭', malaysia: '🇲🇾',
-    singapore: '🇸🇬', norway: '🇳🇴', denmark: '🇩🇰', finland: '🇫🇮',
-  };
-  return map[country] ?? '🌐';
+  const single = getFirstCountry(country);
+  return single ? (COUNTRY_FLAG_MAP[single] ?? '🌐') : '🌐';
 }
 
 export function getCountryName(country: string, lang: Language): string {
-  return t(country, lang) || country;
+  const single = getFirstCountry(country);
+  return single ? (t(single, lang) || single) : '';
 }
 
 export const COUNTRY_OPTIONS = [

@@ -70,7 +70,7 @@ function CommentItem({
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const commentText = language === 'en' && comment.contentEn ? comment.contentEn : comment.content;
-  const displayText = translated ?? commentText;
+  const displayText = (translated ? decodeForDisplay(translated) : decodeForDisplay(commentText ?? '')) ?? '';
 
   const onTranslate = useCallback(async () => {
     if (translating || !commentText?.trim()) return;
@@ -98,7 +98,7 @@ function CommentItem({
         <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: '600' as const, color: colors.textPrimary, marginBottom: 2 }}>{comment.author.name}</Text>
           <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>{displayText ?? ''}</Text>
-          {translated && (
+          {translated && displayText.trim() !== (commentText ?? '').trim() && (
             <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
           )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
@@ -410,9 +410,9 @@ function PostCard({
 
       <View style={{ marginBottom: 12 }}>
         <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22, textAlign: isRTL(language) ? 'right' : 'left' }}>
-          {(isTranslating ? contentText : displayContent) ?? ''}
+          {decodeForDisplay((isTranslating ? contentText : displayContent) ?? '') ?? ''}
         </Text>
-        {isShowingTranslated && (
+        {isShowingTranslated && decodeForDisplay(displayContent ?? '').trim() !== (contentText ?? '').trim() && (
           <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
         )}
         <Pressable

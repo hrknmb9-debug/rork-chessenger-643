@@ -277,7 +277,7 @@ function MessageBubble({
     }
   }, [hasTranslatableText, item.text, language, translatedText, isTranslating]);
 
-  const displayText = (translatedText != null ? decodeForDisplay(translatedText) : item.text) ?? '';
+  const displayText = (translatedText != null ? decodeForDisplay(translatedText) : decodeForDisplay(item.text ?? '')) ?? '';
 
   const reactionGroups = useMemo(() => {
     const map: Record<string, number> = {};
@@ -348,7 +348,7 @@ function MessageBubble({
               <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
                 {displayText}
               </Text>
-              {translatedText && (
+              {translatedText && displayText.trim() !== (item.text ?? '').trim() && (
                 <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther, { fontSize: 10, opacity: 0.8, marginTop: 2 }]}>
                   {t('translated_by_ai', language)}
                 </Text>
