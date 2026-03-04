@@ -193,8 +193,10 @@ function PostCard({
     ((!!post.event.deadlineAt && new Date(post.event.deadlineAt) <= new Date()) || !!post.event.isClosed);
 
   const formatDeadlineDisplay = () => {
-    if (!post.event?.deadlineAt) return '';
-    const d = new Date(post.event.deadlineAt);
+    const deadline = post.event?.deadlineAt;
+    if (!deadline || (typeof deadline === 'string' && deadline.trim() === '')) return '';
+    const d = new Date(deadline);
+    if (Number.isNaN(d.getTime())) return '';
     const y = d.getFullYear();
     const m = d.getMonth() + 1;
     const day = d.getDate();

@@ -76,12 +76,20 @@ async function fillMissingEventDetails(
   const needsEvent = built.filter(p => !p.event).map(p => p.id);
   if (needsEvent.length === 0) return built;
   let result = built;
-  const { data: batchEvents } = await client.from('events').select('*').in('post_id', needsEvent);
+  const needsEventSet = new Set(needsEvent.map(String));
+  let batchEvents: Record<string, unknown>[] | null = null;
+  const { data: batchIn, error: batchErr } = await client.from('events').select('*').in('post_id', needsEvent);
+  if (batchErr) console.log('ChessProvider: fillMissingEventDetails batch error', batchErr.message);
+  batchEvents = (batchIn ?? []) as Record<string, unknown>[];
+  if (batchEvents.length === 0 && needsEvent.length > 0) {
+    const { data: allEv } = await client.from('events').select('*');
+    batchEvents = ((allEv ?? []) as Record<string, unknown>[]).filter(e => needsEventSet.has(String(e.post_id ?? '')));
+  }
   const batchMap = new Map<string, Record<string, unknown>>();
   if (batchEvents && batchEvents.length > 0) {
-    for (const e of batchEvents as Record<string, unknown>[]) {
+    for (const e of batchEvents) {
       const pid = String(e.post_id ?? '');
-      if (pid && needsEvent.includes(pid)) batchMap.set(pid, e);
+      if (pid && needsEventSet.has(pid)) batchMap.set(pid, e);
     }
   }
   for (const postId of needsEvent) {
@@ -109,17 +117,19 @@ async function fillMissingEventDetails(
     }
     const supabasePost = postsData.find((p: SupabasePost) => p.id === postId);
     const post = result.find(p => p.id === postId);
+    const deadlineVal = evRow.deadline_at;
+    const deadlineAt = deadlineVal != null && String(deadlineVal).trim() !== '' ? String(deadlineVal) : undefined;
     const timelineEvent: TimelineEvent = {
       id: evRow.id as string,
       userId: supabasePost?.user_id ?? post?.author?.id ?? '',
-      title: (evRow.title as string) ?? post?.content ?? '',
-      date,
-      time,
+      title: ((evRow.title as string) || post?.content || '').trim() || 'イベント',
+      date: date || '-',
+      time: time || '-',
       location: (evRow.location as string) ?? '',
       maxParticipants: (evRow.max_participants as number) ?? 10,
       participants,
       createdAt: (evRow.created_at as string) ?? post?.createdAt ?? '',
-      deadlineAt: (evRow.deadline_at as string) ?? undefined,
+      deadlineAt,
       isClosed: !!(evRow.closed_at as string | null),
     };
     result = result.map(p => p.id === postId ? { ...p, type: 'event' as const, event: timelineEvent } : p);
@@ -434,9 +444,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       let event: TimelineEvent | undefined;
 
       if (rawEvent) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('ChessProvider: buildTimelinePosts event for post', post.id, { title: rawEvent.title, date: rawEvent.date, deadline_at: rawEvent.deadline_at });
-        }
         postType = 'event';
         const participants = epData
           .filter(ep => ep.event_id === (rawEvent.id as string))
@@ -456,17 +463,19 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           }
         }
 
+        const deadlineVal = rawEvent.deadline_at;
+        const deadlineAt = deadlineVal != null && String(deadlineVal).trim() !== '' ? String(deadlineVal) : undefined;
         event = {
           id: rawEvent.id as string,
           userId: post.user_id,
-          title: (rawEvent.title as string) ?? post.content,
-          date,
-          time,
+          title: ((rawEvent.title as string) || post.content || '').trim() || 'イベント',
+          date: date || '-',
+          time: time || '-',
           location: (rawEvent.location as string) ?? '',
           maxParticipants: (rawEvent.max_participants as number) ?? 10,
           participants,
           createdAt: (rawEvent.created_at as string) ?? post.created_at,
-          deadlineAt: (rawEvent.deadline_at as string) ?? undefined,
+          deadlineAt,
           isClosed: !!(rawEvent.closed_at as string | null),
         };
       }
@@ -1209,11 +1218,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .from('events')
         .select('*')
         .in('post_id', postIds);
-      if (eventsErr) console.log('ChessProvider: events fetch error', eventsErr.message);
+      if (eventsErr) console.log('[EVENT_DEBUG] events fetch error', eventsErr.message);
       const eventsData: Record<string, unknown>[] = (eventsRaw ?? []).filter((e: Record<string, unknown>) =>
         postIds.includes(String(e.post_id ?? ''))
       );
-
       if (postsData.length > 0) {
         const { data: commentsData } = await supabase
           .from('comments')
@@ -1246,8 +1254,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         );
         built = await fillMissingEventDetails(built, postsData, supabase);
         const eventCount = built.filter(p => p.event).length;
-        if (process.env.NODE_ENV === 'development' && eventCount > 0) {
-          console.log('ChessProvider: Timeline built', built.length, 'posts,', eventCount, 'with event details', built.filter(p => p.event).map(p => ({ id: p.id, title: p.event?.title })));
+        if (eventCount > 0) {
+          console.log('[EVENT_VERIFY] Timeline built:', built.length, 'posts,', eventCount, 'with event | samples:', built.filter(p => p.event).slice(0, 3).map(p => ({ id: p.id, title: p.event?.title, deadlineAt: p.event?.deadlineAt ?? 'none' })));
         }
         setTimelinePosts(prev =>
           applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
@@ -1959,7 +1967,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
               location: event.location,
               max_participants: event.maxParticipants,
               created_at: event.createdAt,
-              deadline_at: event.deadlineAt ?? null,
+              deadline_at: event.deadlineAt != null && String(event.deadlineAt).trim() !== '' ? event.deadlineAt : null,
               closed_at: null,
             })
             .select()
