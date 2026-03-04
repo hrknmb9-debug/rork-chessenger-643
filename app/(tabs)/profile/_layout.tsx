@@ -1,9 +1,12 @@
 import { Stack } from 'expo-router';
 import React from 'react';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useChess } from '@/providers/ChessProvider';
+import { t } from '@/utils/translations';
 
 export default function ProfileLayout() {
   const { colors } = useTheme();
+  const { language } = useChess();
 
   return (
     <Stack
@@ -16,7 +19,7 @@ export default function ProfileLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: 'プロフィール' }}
+        options={{ title: t('tab_profile', language) }}
       />
     </Stack>
   );

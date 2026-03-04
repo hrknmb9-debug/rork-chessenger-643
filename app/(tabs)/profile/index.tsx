@@ -113,7 +113,7 @@ export default function ProfileScreen() {
         return {
           eventId: ev.id,
           postId: ev.post_id,
-          title: ev.title || (post as { content?: string })?.content || 'イベント',
+          title: ev.title || (post as { content?: string })?.content || t('event', language),
           date: ev.date,
           time: ev.time,
           participants: (participantsByEvent.get(ev.id) ?? []).map(uid => ({
@@ -130,7 +130,7 @@ export default function ProfileScreen() {
     } finally {
       setLoadingHosted(false);
     }
-  }, [user?.id, profile?.id]);
+  }, [user?.id, profile?.id, language]);
 
   useFocusEffect(
     useCallback(() => {

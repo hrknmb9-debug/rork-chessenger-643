@@ -10,7 +10,14 @@ const corsHeaders = {
 };
 
 function normalizeLang(lang: string): string {
-  const m: Record<string, string> = { ja: 'ja', en: 'en', japanese: 'ja', english: 'en' };
+  const m: Record<string, string> = {
+    ja: 'ja', japanese: 'ja', en: 'en', english: 'en',
+    zh: 'zh', chinese: 'zh', ko: 'ko', korean: 'ko',
+    fr: 'fr', de: 'de', es: 'es', pt: 'pt', ru: 'ru',
+    ar: 'ar', hi: 'hi', it: 'it', th: 'th', vi: 'vi', tr: 'tr',
+    nl: 'nl', pl: 'pl', sv: 'sv', id: 'id', ms: 'ms', tl: 'tl',
+    da: 'da', fi: 'fi', no: 'no', auto: 'auto',
+  };
   return m[lang?.toLowerCase()] ?? lang?.slice(0, 2) ?? 'en';
 }
 

@@ -87,31 +87,59 @@ async function setCache(text: string, target: string, source: string, translated
   }
 }
 
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
 /**
- * Supabase Edge Function で翻訳を試行（supabase.functions.invoke 使用）
+ * Supabase Edge Function で翻訳を試行
+ * 1. supabase.functions.invoke（認証トークン自動付与）
+ * 2. 失敗時は直接 fetch で再試行（CORS・ネットワーク問題の回避）
  */
 async function translateViaEdgeFunction(
   text: string,
   targetLang: string,
-  sourceLang: string
+  sourceLang: string,
+  accessToken?: string | null
 ): Promise<TranslateResult | null> {
+  // 1. invoke で試行
   try {
     const { data, error } = await supabase.functions.invoke('translate', {
       body: { text, targetLang, sourceLang },
     });
-    if (error) {
-      console.log('translate Edge Function error:', error.message);
-      return null;
+    if (!error) {
+      const translated = data?.translatedText ?? data?.text;
+      if (translated && typeof translated === 'string') {
+        return { text: translated };
+      }
     }
-    const translated = data?.translatedText ?? data?.text;
-    if (translated && typeof translated === 'string') {
-      return { text: translated };
-    }
-    return null;
-  } catch (e) {
-    console.log('translate Edge Function exception:', e);
-    return null;
+  } catch {
+    // フォールバックへ
   }
+
+  // 2. 直接 fetch で再試行（invoke 失敗時の保険）
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken ?? SUPABASE_ANON_KEY}`,
+      };
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/translate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text, targetLang, sourceLang }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const translated = data?.translatedText ?? data?.text;
+        if (translated && typeof translated === 'string') {
+          return { text: translated };
+        }
+      }
+    } catch {
+      // MyMemory フォールバックへ
+    }
+  }
+  return null;
 }
 
 /**
@@ -153,7 +181,7 @@ export async function translateText(
   const cached = await getCached(text, normalizedTarget, sourceLang);
   if (cached) return { text: cached };
 
-  const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang);
+  const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang, _accessToken);
   if (viaEdge && 'text' in viaEdge) {
     setCache(text, normalizedTarget, sourceLang, viaEdge.text);
     return viaEdge;

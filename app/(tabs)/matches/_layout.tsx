@@ -1,9 +1,12 @@
 import { Stack } from 'expo-router';
 import React from 'react';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useChess } from '@/providers/ChessProvider';
+import { t } from '@/utils/translations';
 
 export default function MatchesLayout() {
   const { colors } = useTheme();
+  const { language } = useChess();
 
   return (
     <Stack
@@ -16,7 +19,7 @@ export default function MatchesLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: 'マッチ' }}
+        options={{ title: t('tab_matches', language) }}
       />
     </Stack>
   );

@@ -3,26 +3,31 @@ import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ThemeColors } from "@/constants/colors";
 import { useTheme } from "@/providers/ThemeProvider";
+import { useChess } from "@/providers/ChessProvider";
 import { BackNavButton } from "@/components/BackNavButton";
+import { t } from "@/utils/translations";
 
 export default function NotFoundScreen() {
   const { colors } = useTheme();
+  const { language } = useChess();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
+  const title = t('page_not_found', language);
+  const backLabel = t('back_to_home', language);
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: "ページが見つかりません",
+          title,
           headerLeft: () => <BackNavButton onPress={() => router.back()} />,
         }}
       />
       <View style={styles.container}>
         <Text style={styles.icon}>♟</Text>
-        <Text style={styles.title}>ページが見つかりません</Text>
+        <Text style={styles.title}>{title}</Text>
         <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>ホームに戻る</Text>
+          <Text style={styles.linkText}>{backLabel}</Text>
         </Link>
       </View>
     </>

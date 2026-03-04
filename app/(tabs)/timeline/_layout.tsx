@@ -5,6 +5,7 @@ import { Bell } from 'lucide-react-native';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { BackNavButton } from '@/components/BackNavButton';
+import { t } from '@/utils/translations';
 
 function BellHeaderButton() {
   const { colors } = useTheme();
@@ -42,6 +43,7 @@ function BellHeaderButton() {
 
 export default function TimelineLayout() {
   const { colors } = useTheme();
+  const { language } = useChess();
   const router = useRouter();
 
   return (
@@ -55,14 +57,14 @@ export default function TimelineLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'タイムライン',
+          title: t('tab_timeline', language),
           headerRight: () => <BellHeaderButton />,
         }}
       />
       <Stack.Screen
         name="notifications"
         options={{
-          title: '通知',
+          title: t('notifications', language),
           headerBackTitle: ' ',
           headerLeft: () => <BackNavButton onPress={() => router.back()} />,
         }}
