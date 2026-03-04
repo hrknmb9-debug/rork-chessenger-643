@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -155,6 +155,8 @@ function PostCard({
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedEventTitle, setTranslatedEventTitle] = useState<string | null>(null);
+  const [translatedEventLocation, setTranslatedEventLocation] = useState<string | null>(null);
   const heartScale = useRef(new Animated.Value(1)).current;
   const userId = currentUserId ?? 'me';
   const isLiked = post.likes.includes(userId);
@@ -205,6 +207,35 @@ function PostCard({
       setIsTranslating(false);
     }
   }, [contentText, language, isTranslating, isShowingTranslated]);
+
+  const targetLang = getTargetLanguage(language);
+  useEffect(() => {
+    if (!post.event) {
+      setTranslatedEventTitle(null);
+      setTranslatedEventLocation(null);
+      return;
+    }
+    setTranslatedEventTitle(null);
+    setTranslatedEventLocation(null);
+    let cancelled = false;
+    const run = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (post.event?.title?.trim()) {
+        const r = await translateText(post.event.title, targetLang, token);
+        if (!cancelled && 'text' in r) setTranslatedEventTitle(r.text);
+      }
+      if (post.event?.location?.trim()) {
+        const r = await translateText(post.event.location, targetLang, token);
+        if (!cancelled && 'text' in r) setTranslatedEventLocation(r.text);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [post.event?.id, post.event?.title, post.event?.location, targetLang]);
+
+  const displayEventTitle = translatedEventTitle ?? post.event?.title ?? '';
+  const displayEventLocation = translatedEventLocation ?? post.event?.location ?? '';
 
   const getTypeIcon = () => {
     switch (post.type) {
@@ -309,16 +340,16 @@ function PostCard({
       {/* イベント投稿の場合: イベントカードをコンテンツより先に表示（詳細を強調） */}
       {post.event && (
         <View style={{ backgroundColor: colors.greenMuted, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.green + '33', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8 }}>{post.event.title}</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8 }}>{displayEventTitle}</Text>
           <View style={{ gap: 4, marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Calendar size={13} color={colors.green} />
               <Text style={{ fontSize: 13, color: colors.textSecondary }}>{post.event.date} {post.event.time}</Text>
             </View>
-            {post.event.location ? (
+            {displayEventLocation ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <MapPin size={13} color={colors.green} />
-                <Text style={{ fontSize: 13, color: colors.textSecondary }}>{post.event.location}</Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>{displayEventLocation}</Text>
               </View>
             ) : null}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -331,9 +362,7 @@ function PostCard({
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Hourglass size={13} color={colors.green} />
                 <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                  {language === 'ja'
-                    ? `募集締切: ${formatDeadlineDisplay()}`
-                    : `Deadline: ${formatDeadlineDisplay()}`}
+                  {t('event_deadline', language)}: {formatDeadlineDisplay()}
                 </Text>
               </View>
             ) : null}
@@ -347,11 +376,11 @@ function PostCard({
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 Alert.alert(
-                  language === 'ja' ? '参加を取り消しますか？' : 'Cancel participation?',
+                  t('cancel_participation_confirm', language),
                   '',
                   [
-                    { text: language === 'ja' ? 'キャンセル' : 'Cancel', style: 'cancel' },
-                    { text: language === 'ja' ? '取り消す' : 'Cancel participation', style: 'destructive', onPress: () => leaveEvent(post.id) },
+                    { text: t('cancel', language), style: 'cancel' },
+                    { text: t('cancel_participation', language), style: 'destructive', onPress: () => leaveEvent(post.id) },
                   ]
                 );
               }}

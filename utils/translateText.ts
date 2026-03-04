@@ -2,14 +2,17 @@
  * テキスト翻訳ユーティリティ
  * Supabase Edge Function または MyMemory 無料API を使用
  * 翻訳結果は AsyncStorage にキャッシュし API クォータを節約
+ * iOS環境での fetch/UTF-8 問題に対応
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { supabase } from '@/utils/supabaseClient';
 
 const TRANSLATE_CACHE_KEY = 'chess_translate_cache';
 const CACHE_MAX_ENTRIES = 500;
 const CACHE_VERSION = 2;
+const TRANSLATE_DEBUG = __DEV__;
 
 export type TranslateResult = { text: string } | { error: string };
 
@@ -115,9 +118,27 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
+ * UTF-8 でレスポンステキストをパース（iOS WebView/Native の文字化け対策）
+ */
+async function parseJsonFromResponse(res: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const rawText = await res.text();
+    if (TRANSLATE_DEBUG) {
+      console.log('[translate] response status:', res.status, 'body length:', rawText?.length, 'preview:', rawText?.slice(0, 80));
+    }
+    if (!rawText?.trim()) return null;
+    const parsed = JSON.parse(rawText) as Record<string, unknown>;
+    return parsed;
+  } catch (e) {
+    if (TRANSLATE_DEBUG) console.warn('[translate] JSON parse failed:', e);
+    return null;
+  }
+}
+
+/**
  * Supabase Edge Function で翻訳を試行
- * 1. supabase.functions.invoke（認証トークン自動付与）
- * 2. 失敗時は直接 fetch で再試行（CORS・ネットワーク問題の回避）
+ * iOS: 直接 fetch を優先（invoke が Hermes/RN 環境で不安定な場合がある）
+ * 全プラットフォーム: res.text() + JSON.parse で UTF-8 を確実に処理
  */
 async function translateViaEdgeFunction(
   text: string,
@@ -125,45 +146,74 @@ async function translateViaEdgeFunction(
   sourceLang: string,
   accessToken?: string | null
 ): Promise<TranslateResult | null> {
-  // 1. invoke で試行
+  const token = accessToken ?? SUPABASE_ANON_KEY;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (TRANSLATE_DEBUG) console.warn('[translate] Missing SUPABASE_URL or ANON_KEY');
+    return null;
+  }
+
+  const doFetch = async (): Promise<TranslateResult | null> => {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      const bodyStr = JSON.stringify({ text, targetLang, sourceLang });
+      if (TRANSLATE_DEBUG) console.log('[translate] POST', SUPABASE_URL + '/functions/v1/translate', 'target:', targetLang, 'len:', text.length);
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/translate`, {
+        method: 'POST',
+        headers,
+        body: bodyStr,
+      });
+      const data = await parseJsonFromResponse(res);
+      if (!data) {
+        if (TRANSLATE_DEBUG) console.warn('[translate] Empty or invalid response');
+        return null;
+      }
+      const err = data.error as string | undefined;
+      if (err) {
+        if (TRANSLATE_DEBUG) console.warn('[translate] API error:', err);
+        return null;
+      }
+      const raw = (data.translatedText ?? data.text) as string | undefined;
+      if (raw && typeof raw === 'string') {
+        return { text: safeDecodeTranslated(raw) };
+      }
+      if (TRANSLATE_DEBUG) console.warn('[translate] No translatedText in response');
+      return null;
+    } catch (e) {
+      if (TRANSLATE_DEBUG) console.warn('[translate] fetch failed:', e);
+      return null;
+    }
+  };
+
+  if (Platform.OS === 'ios') {
+    const result = await doFetch();
+    if (result) return result;
+    if (TRANSLATE_DEBUG) console.log('[translate] iOS direct fetch failed, trying invoke');
+  }
+
   try {
     const { data, error } = await supabase.functions.invoke('translate', {
       body: { text, targetLang, sourceLang },
     });
+    if (TRANSLATE_DEBUG && error) console.warn('[translate] invoke error:', error?.message ?? error);
     if (!error) {
       const raw = data?.translatedText ?? data?.text;
       if (raw && typeof raw === 'string') {
         return { text: safeDecodeTranslated(raw) };
       }
     }
-  } catch {
-    // フォールバックへ
+  } catch (e) {
+    if (TRANSLATE_DEBUG) console.warn('[translate] invoke exception:', e);
   }
 
-  // 2. 直接 fetch で再試行（invoke 失敗時の保険）
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Accept': 'application/json; charset=utf-8',
-        Authorization: `Bearer ${accessToken ?? SUPABASE_ANON_KEY}`,
-      };
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/translate`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ text, targetLang, sourceLang }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as Record<string, unknown>;
-        const raw = data?.translatedText ?? data?.text;
-        if (raw && typeof raw === 'string') {
-          return { text: safeDecodeTranslated(raw) };
-        }
-      }
-    } catch {
-      // MyMemory フォールバックへ
-    }
+  if (Platform.OS !== 'ios') {
+    const result = await doFetch();
+    if (result) return result;
   }
+
   return null;
 }
 
@@ -196,23 +246,30 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
 export async function translateText(
   text: string,
   targetLang: string,
-  _accessToken?: string | null
+  accessToken?: string | null
 ): Promise<TranslateResult> {
   if (!text?.trim()) return { error: 'Empty text' };
   const normalizedTarget = normalizeLang(targetLang);
   const sourceLang = detectSourceLang(text);
-  if (sourceLang === normalizedTarget) return { text };
+  if (sourceLang === normalizedTarget) {
+    if (TRANSLATE_DEBUG) console.log('[translate] Skip: source===target', normalizedTarget);
+    return { text };
+  }
 
   const cached = await getCached(text, normalizedTarget, sourceLang);
-  if (cached) return { text: safeDecodeTranslated(cached) };
+  if (cached) {
+    if (TRANSLATE_DEBUG) console.log('[translate] Cache hit');
+    return { text: safeDecodeTranslated(cached) };
+  }
 
-  const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang, _accessToken);
+  const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang, accessToken);
   if (viaEdge && 'text' in viaEdge) {
     const decoded = safeDecodeTranslated(viaEdge.text);
     setCache(text, normalizedTarget, sourceLang, decoded);
     return { text: decoded };
   }
 
+  if (TRANSLATE_DEBUG) console.log('[translate] Edge failed, trying MyMemory');
   const viaMyMemory = await translateViaMyMemory(text, normalizedTarget, sourceLang);
   if (viaMyMemory && 'text' in viaMyMemory) {
     const decoded = safeDecodeTranslated(viaMyMemory.text);
@@ -220,5 +277,6 @@ export async function translateText(
     return { text: decoded };
   }
 
+  if (TRANSLATE_DEBUG) console.warn('[translate] All methods failed');
   return { error: 'Translation failed' };
 }
