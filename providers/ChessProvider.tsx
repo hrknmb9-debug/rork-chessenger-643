@@ -68,6 +68,25 @@ interface SupabasePost {
   created_at: string;
 }
 
+/** posts と events の結合結果から events を抽出。Supabase の 1:many では events は配列で返る */
+function extractEventsFromJoinedPosts(
+  rows: Array<Record<string, unknown>>
+): { posts: SupabasePost[]; events: Record<string, unknown>[] } {
+  const posts: SupabasePost[] = [];
+  const events: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    const { events: ev, ...rest } = row;
+    posts.push(rest as SupabasePost);
+    const evArr = Array.isArray(ev) ? ev : ev != null && typeof ev === 'object' ? [ev] : [];
+    for (const e of evArr) {
+      if (e && typeof e === 'object' && 'id' in e) {
+        events.push(e as Record<string, unknown>);
+      }
+    }
+  }
+  return { posts, events };
+}
+
 async function fillMissingEventDetails(
   built: TimelinePost[],
   postsData: SupabasePost[],
@@ -434,6 +453,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       let event: TimelineEvent | undefined;
 
       if (rawEvent) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ChessProvider: buildTimelinePosts event for post', post.id, { title: rawEvent.title, date: rawEvent.date, deadline_at: rawEvent.deadline_at });
+        }
         postType = 'event';
         const participants = epData
           .filter(ep => ep.event_id === (rawEvent.id as string))
@@ -702,14 +724,33 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         }
         }
 
-        const { data: postsData, error: postsError } = await supabase
+        const { data: postsWithEvents, error: postsError } = await supabase
           .from('posts')
-          .select('*')
+          .select('*, events(*)')
           .order('created_at', { ascending: false })
           .limit(50);
 
+        let postsData: SupabasePost[] | null = null;
+        let eventsData: Record<string, unknown>[] = [];
+
         if (postsError) {
-          console.log('ChessProvider: posts fetch error, keeping previous timeline', postsError.message);
+          console.log('ChessProvider: posts+events join error, falling back', postsError.message);
+          const { data: postsOnly } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(50);
+          if (postsOnly?.length) {
+            postsData = postsOnly;
+            const postIds = postsData.map((p: SupabasePost) => p.id);
+            const { data: evData } = await supabase.from('events').select('*').in('post_id', postIds);
+            eventsData = (evData ?? []).filter((e: Record<string, unknown>) => postIds.includes(String(e.post_id ?? '')));
+          }
+        } else if (postsWithEvents && postsWithEvents.length > 0) {
+          const extracted = extractEventsFromJoinedPosts(postsWithEvents as Array<Record<string, unknown>>);
+          postsData = extracted.posts;
+          eventsData = extracted.events;
+          console.log('ChessProvider: Loaded via join', { posts: postsData.length, events: eventsData.length });
+        }
+
+        if (postsError && !postsData?.length) {
+          console.log('ChessProvider: posts fetch error, keeping previous timeline');
         } else if (postsData && postsData.length > 0) {
           const postIds = postsData.map((p: SupabasePost) => p.id);
 
@@ -723,29 +764,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             .from('post_likes')
             .select('post_id, user_id')
             .in('post_id', postIds);
-
-          const postIdSet = new Set(postIds);
-          let eventsData: Record<string, unknown>[] = [];
-          const { data: eventsIn, error: eventsInErr } = await supabase
-            .from('events')
-            .select('*')
-            .in('post_id', postIds);
-          if (eventsIn && eventsIn.length > 0) {
-            eventsData = eventsIn.filter((e: Record<string, unknown>) =>
-              postIdSet.has(String(e.post_id ?? ''))
-            );
-          }
-          if (eventsData.length === 0) {
-            const { data: eventsFull } = await supabase.from('events').select('*');
-            if (eventsFull && eventsFull.length > 0) {
-              eventsData = eventsFull.filter((e: Record<string, unknown>) =>
-                postIdSet.has(String(e.post_id ?? ''))
-              );
-            }
-            if (eventsData.length === 0 && eventsInErr) {
-              console.log('ChessProvider: events fetch', eventsInErr.message);
-            }
-          }
 
           const eventIds = eventsData.map((e: Record<string, unknown>) => e.id as string);
           let eventParticipantsData: { event_id: string; user_id: string }[] = [];
@@ -1196,16 +1214,39 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
 
-      const { data: postsData, error: postsError } = await supabase
+      // 1. posts + events を一括取得（Join）。FK がない場合はフォールバック
+      let postsData: SupabasePost[];
+      let eventsData: Record<string, unknown>[];
+      const { data: postsWithEvents, error: postsError } = await supabase
         .from('posts')
-        .select('*')
+        .select('*, events(*)')
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (postsError) {
-        console.log('ChessProvider: refresh posts error, keeping previous timeline', postsError.message);
-        return;
+        console.log('ChessProvider: posts+events join error, falling back to separate fetch', postsError.message);
+        const { data: postsOnly, error: poErr } = await supabase
+          .from('posts')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (poErr || !postsOnly?.length) {
+          if (poErr) console.log('ChessProvider: refresh posts error', poErr.message);
+          return;
+        }
+        postsData = postsOnly;
+        const postIds = postsData.map((p: SupabasePost) => p.id);
+        const { data: evData } = await supabase.from('events').select('*').in('post_id', postIds);
+        eventsData = (evData ?? []).filter((e: Record<string, unknown>) =>
+          postIds.includes(String(e.post_id ?? ''))
+        );
+      } else {
+        const extracted = extractEventsFromJoinedPosts((postsWithEvents ?? []) as Array<Record<string, unknown>>);
+        postsData = extracted.posts;
+        eventsData = extracted.events;
+        console.log('ChessProvider: Timeline fetched via join', { posts: postsData.length, events: eventsData.length, sampleEvent: eventsData[0] });
       }
+
       if (postsData && postsData.length > 0) {
         const postIds = postsData.map((p: SupabasePost) => p.id);
 
@@ -1220,28 +1261,6 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           .select('post_id, user_id')
           .in('post_id', postIds);
 
-        const postIdSet = new Set(postIds);
-        let eventsData: Record<string, unknown>[] = [];
-        const { data: eventsIn, error: eventsInErr } = await supabase
-          .from('events')
-          .select('*')
-          .in('post_id', postIds);
-        if (eventsIn && eventsIn.length > 0) {
-          eventsData = eventsIn.filter((e: Record<string, unknown>) =>
-            postIdSet.has(String(e.post_id ?? ''))
-          );
-        }
-        if (eventsData.length === 0) {
-          const { data: eventsFull } = await supabase.from('events').select('*');
-          if (eventsFull && eventsFull.length > 0) {
-            eventsData = eventsFull.filter((e: Record<string, unknown>) =>
-              postIdSet.has(String(e.post_id ?? ''))
-            );
-          }
-          if (eventsData.length === 0 && eventsInErr) {
-            console.log('ChessProvider: refresh events fetch', eventsInErr.message);
-          }
-        }
         const eventIds = eventsData.map((e: Record<string, unknown>) => e.id as string);
         let epData: { event_id: string; user_id: string }[] = [];
         if (eventIds.length > 0) {
@@ -1261,6 +1280,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           blockedUsers
         );
         built = await fillMissingEventDetails(built, postsData, supabase);
+        const eventCount = built.filter(p => p.event).length;
+        if (process.env.NODE_ENV === 'development' && eventCount > 0) {
+          console.log('ChessProvider: Timeline built', built.length, 'posts,', eventCount, 'with event details', built.filter(p => p.event).map(p => ({ id: p.id, title: p.event?.title })));
+        }
         setTimelinePosts(prev =>
           applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
         );

@@ -245,6 +245,60 @@ function PostCard({
         </View>
       </View>
 
+      {/* イベント投稿の場合: イベントカードをコンテンツより先に表示（詳細を強調） */}
+      {post.event && (
+        <View style={{ backgroundColor: colors.greenMuted, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.green + '33', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8 }}>{post.event.title}</Text>
+          <View style={{ gap: 4, marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Calendar size={13} color={colors.green} />
+              <Text style={{ fontSize: 13, color: colors.textSecondary }}>{post.event.date} {post.event.time}</Text>
+            </View>
+            {post.event.location ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <MapPin size={13} color={colors.green} />
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>{post.event.location}</Text>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Users size={13} color={colors.green} />
+              <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                {post.event.participants.length}/{post.event.maxParticipants} {t('participants', language)}
+              </Text>
+            </View>
+            {post.event.deadlineAt ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Hourglass size={13} color={colors.green} />
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                  {language === 'ja'
+                    ? `募集締切: ${formatDeadlineDisplay()}`
+                    : `Deadline: ${formatDeadlineDisplay()}`}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          {isEventClosed ? (
+            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.divider }}>
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.textMuted }}>{t('event_closed', language)}</Text>
+            </View>
+          ) : isEventJoined ? (
+            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.greenMuted, borderWidth: 1, borderColor: colors.green }}>
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.green }}>{t('event_joined', language)}</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                joinEvent(post.id);
+              }}
+              style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.green }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.white }}>{t('join_event', language)}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22, marginBottom: 12 }}>{contentText}</Text>
 
       {post.imageUrl && (
@@ -269,57 +323,6 @@ function PostCard({
             </Text>
             <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '500' as const, marginLeft: 4 }}>{post.matchResult.timeControl}</Text>
           </View>
-        </View>
-      )}
-
-      {post.event && (
-        <View style={{ backgroundColor: colors.greenMuted, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.green + '33' }}>
-          <Text style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8 }}>{post.event.title}</Text>
-          <View style={{ gap: 4, marginBottom: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Calendar size={13} color={colors.green} />
-              <Text style={{ fontSize: 13, color: colors.textSecondary }}>{post.event.date} {post.event.time}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <MapPin size={13} color={colors.green} />
-              <Text style={{ fontSize: 13, color: colors.textSecondary }}>{post.event.location}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Users size={13} color={colors.green} />
-              <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                {post.event.participants.length}/{post.event.maxParticipants} {t('participants', language)}
-              </Text>
-            </View>
-            {post.event.deadlineAt && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Hourglass size={13} color={colors.green} />
-                <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                  {language === 'ja'
-                    ? `募集締切: ${formatDeadlineDisplay()}`
-                    : `Deadline: ${formatDeadlineDisplay()}`}
-                </Text>
-              </View>
-            )}
-          </View>
-          {isEventClosed ? (
-            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.divider }}>
-              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.textMuted }}>{t('event_closed', language)}</Text>
-            </View>
-          ) : isEventJoined ? (
-            <View style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.greenMuted, borderWidth: 1, borderColor: colors.green }}>
-              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.green }}>{t('event_joined', language)}</Text>
-            </View>
-          ) : (
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                joinEvent(post.id);
-              }}
-              style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: colors.green }}
-            >
-              <Text style={{ fontSize: 14, fontWeight: '700' as const, color: colors.white }}>{t('join_event', language)}</Text>
-            </Pressable>
-          )}
         </View>
       )}
 
