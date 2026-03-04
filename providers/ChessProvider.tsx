@@ -166,6 +166,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const lastSeenInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const profileCacheRef = useRef<Map<string, Player>>(new Map());
   const eventCacheRef = useRef<Map<string, TimelineEvent>>(new Map());
+  const refreshTimelineRef = useRef<() => Promise<void>>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -987,7 +988,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       }, (payload) => {
         const row = payload.new as SupabasePost;
         if (row.user_id !== currentUserId) {
-          refreshTimeline();
+          refreshTimelineRef.current?.();
           return;
         }
         setTimelinePosts(prev => {
@@ -1006,7 +1007,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             comments: [],
           };
           if (isEvent) {
-            refreshTimeline();
+            refreshTimelineRef.current?.();
             return prev;
           }
           return [newPost, ...prev];
@@ -1023,7 +1024,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         schema: 'public',
         table: 'events',
       }, () => {
-        refreshTimeline();
+        refreshTimelineRef.current?.();
       })
       .subscribe((status) => {
         console.log('Realtime: Events subscription status:', status);
@@ -1037,7 +1038,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       if (postsChannel) supabase.removeChannel(postsChannel);
       if (eventsChannel) supabase.removeChannel(eventsChannel);
     };
-  }, [userLocation, currentUserId, fetchPlayerProfile, fetchUnreadCountByUser, profile, refreshTimeline]);
+  }, [userLocation, currentUserId, fetchPlayerProfile, fetchUnreadCountByUser, profile]);
 
   const players = useMemo(() => {
     return supabasePlayers.filter(p => !blockedUsers.includes(p.id));
@@ -1170,6 +1171,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       console.log('ChessProvider: Timeline refresh failed', e);
     }
   }, [blockedUsers, buildTimelinePosts, currentUserId, notifications, mergeRecentOwnPosts, applyEventCacheToPosts]);
+
+  refreshTimelineRef.current = refreshTimeline;
 
   const changeLanguage = useCallback(async (lang: Language) => {
     setLanguage(lang);
