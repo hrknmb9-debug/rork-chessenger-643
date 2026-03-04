@@ -76,12 +76,13 @@ function CommentItem({
   const isManualTranslationActive = translationState.loading || (translationState.localTranslatedContent != null && translationState.localTranslatedContent.trim() !== originalText.trim());
   const finalDisplaySource = translationState.localTranslatedContent ?? originalText;
   const displayText = decodeForDisplay(finalDisplaySource);
+  const textToRender = displayText || originalText;
 
   useEffect(() => {
-    if (__DEV__ && Platform.OS === 'ios' && translationState.localTranslatedContent != null && translationState.displayReady) {
-      console.log('[translate:ios] DISPLAYING TEXT (comment):', finalDisplaySource?.slice(0, 80));
+    if (__DEV__ && Platform.OS === 'ios' && textToRender) {
+      console.log('[translate:ios] SUCCESS: Data rendered');
     }
-  }, [translationState.localTranslatedContent, translationState.displayReady, finalDisplaySource]);
+  }, [textToRender]);
 
   useEffect(() => {
     if (isManualTranslationActive) return;
@@ -142,7 +143,7 @@ function CommentItem({
         <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: '600' as const, color: colors.textPrimary, marginBottom: 2 }}>{comment.author.name}</Text>
           <View key={translationState.renderKey ?? `comment-${comment.id}`}>
-            <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>{displayText}</Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>{textToRender}</Text>
             {translationState.localTranslatedContent != null && translationState.localTranslatedContent.trim() !== (commentText ?? '').trim() && (
               <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
             )}
@@ -237,12 +238,13 @@ function PostCard({
   const isManualTranslationActive = contentTranslationState.loading || (contentTranslationState.localTranslatedContent != null && contentTranslationState.localTranslatedContent.trim() !== originalContentText.trim());
   const finalDisplaySource = contentTranslationState.localTranslatedContent ?? originalContentText;
   const displayContent = decodeForDisplay(finalDisplaySource);
+  const contentToRender = displayContent || originalContentText;
 
   useEffect(() => {
-    if (__DEV__ && Platform.OS === 'ios' && contentTranslationState.localTranslatedContent != null && contentTranslationState.displayReady) {
-      console.log('[translate:ios] DISPLAYING TEXT (post):', finalDisplaySource?.slice(0, 80));
+    if (__DEV__ && Platform.OS === 'ios' && contentToRender) {
+      console.log('[translate:ios] SUCCESS: Data rendered');
     }
-  }, [contentTranslationState.localTranslatedContent, contentTranslationState.displayReady, finalDisplaySource]);
+  }, [contentToRender]);
 
   useEffect(() => {
     if (isManualTranslationActive) return;
@@ -501,7 +503,7 @@ function PostCard({
       <View style={{ marginBottom: 12 }}>
         <View key={contentTranslationState.renderKey ?? `post-${post.id}`}>
           <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22, textAlign: isRTL(language) ? 'right' : 'left' }}>
-            {displayContent}
+            {contentToRender}
           </Text>
           {contentTranslationState.localTranslatedContent != null && contentTranslationState.localTranslatedContent.trim() !== (contentText ?? '').trim() && (
             <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
@@ -649,6 +651,10 @@ export default function TimelineScreen() {
     await Promise.all([refreshPlayers(), refreshTimeline()]);
     setTimeout(() => setRefreshing(false), 800);
   }, [refreshPlayers, refreshTimeline]);
+
+  useEffect(() => {
+    refreshTimeline();
+  }, [refreshTimeline]);
 
   useFocusEffect(
     useCallback(() => {

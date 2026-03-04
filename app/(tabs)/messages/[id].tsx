@@ -254,12 +254,13 @@ function MessageBubble({
   const isManualTranslationActive = translationState.loading || (translationState.localTranslatedContent != null && translationState.localTranslatedContent.trim() !== originalText.trim());
   const finalDisplaySource = translationState.localTranslatedContent ?? originalText;
   const displayText = decodeForDisplay(finalDisplaySource);
+  const textToRender = displayText || originalText;
 
   useEffect(() => {
-    if (__DEV__ && Platform.OS === 'ios' && translationState.localTranslatedContent != null && translationState.displayReady) {
-      console.log('[translate:ios] DISPLAYING TEXT:', finalDisplaySource?.slice(0, 80));
+    if (__DEV__ && Platform.OS === 'ios' && textToRender) {
+      console.log('[translate:ios] SUCCESS: Data rendered');
     }
-  }, [translationState.localTranslatedContent, translationState.displayReady, finalDisplaySource]);
+  }, [textToRender]);
 
   useEffect(() => {
     if (isManualTranslationActive) return;
@@ -390,7 +391,7 @@ function MessageBubble({
           ) : (
             <View key={translationState.renderKey ?? `msg-${item.id}`}>
               <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
-                {displayText}
+                {textToRender}
               </Text>
               {translationState.localTranslatedContent != null && translationState.localTranslatedContent.trim() !== (item.text ?? '').trim() && (
                 <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther, { fontSize: 10, opacity: 0.8, marginTop: 2 }]}>
