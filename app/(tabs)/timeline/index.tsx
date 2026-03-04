@@ -14,6 +14,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeImage } from '@/components/SafeImage';
@@ -101,9 +102,10 @@ function CommentItem({
             <Pressable onPress={() => onReply(comment.id)}>
               <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '500' as const }}>{t('reply', language)}</Text>
             </Pressable>
-            <Pressable onPress={onTranslate} disabled={translating}>
+            <Pressable onPress={onTranslate} disabled={translating} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {translating ? <ActivityIndicator size="small" color={colors.textMuted} style={{ transform: [{ scale: 0.7 }] }} /> : null}
               <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '500' as const }}>
-                {translating ? '...' : translated ? t('original', language) : t('translate', language)}
+                {translating ? (language === 'ja' ? '翻訳中...' : 'Translating...') : translated ? t('original', language) : t('translate', language)}
               </Text>
             </Pressable>
           </View>
@@ -379,9 +381,13 @@ function PostCard({
         <Pressable
           onPress={handleTranslate}
           disabled={isTranslating}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, alignSelf: 'flex-start' }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: isTranslating ? colors.surface : 'transparent' }}
         >
-          <Languages size={14} color={isShowingTranslated ? colors.gold : colors.textMuted} />
+          {isTranslating ? (
+            <ActivityIndicator size="small" color={colors.gold} />
+          ) : (
+            <Languages size={14} color={isShowingTranslated ? colors.gold : colors.textMuted} />
+          )}
           <Text style={{ fontSize: 12, fontWeight: '600' as const, color: isShowingTranslated ? colors.gold : colors.textMuted }}>
             {isTranslating ? (language === 'ja' ? '翻訳中...' : 'Translating...') : isShowingTranslated ? t('original', language) : t('translate', language)}
           </Text>

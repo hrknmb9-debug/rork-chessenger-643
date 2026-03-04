@@ -265,7 +265,10 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
               <Pressable onPress={() => router.push('/(tabs)/(home)/map' as any)} style={styles.mapBtn}>
-                <Map size={14} color={colors.blue} />
+                <Map size={16} color={colors.blue} />
+                <Text style={[styles.mapBtnText, { color: colors.blue }]}>
+                  {language === 'ja' ? 'マップ' : 'Map'}
+                </Text>
               </Pressable>
             </View>
 
@@ -328,7 +331,8 @@ function createStyles(colors: ThemeColors) {
     locationChipActive: { borderColor: colors.blue + '55', backgroundColor: colors.blueMuted },
     locationText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
     locationTextActive: { color: colors.blue },
-    mapBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.blueMuted, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.blue + '33' },
+    mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, backgroundColor: colors.blueMuted, borderWidth: 1, borderColor: colors.blue + '33' },
+    mapBtnText: { fontSize: 13, fontWeight: '600' },
     onlineSection: { marginHorizontal: 16, marginBottom: 4 },
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginBottom: 14, height: 44, paddingHorizontal: 16, backgroundColor: colors.inputBg, borderRadius: 22 },
     searchInput: { flex: 1, fontSize: 15, color: colors.textPrimary },

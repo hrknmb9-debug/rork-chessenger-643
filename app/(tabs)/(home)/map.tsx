@@ -7,6 +7,7 @@ import {
   Platform,
   Modal,
   Animated,
+  SafeAreaView,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeImage } from '@/components/SafeImage';
@@ -131,7 +132,17 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <BackNavButton onPress={() => router.back()} floating />
+      <SafeAreaView style={styles.mapHeader} pointerEvents="box-none">
+        <View style={[styles.mapHeaderBar, { backgroundColor: colors.card }]}>
+          <View style={styles.mapHeaderRow}>
+            <BackNavButton onPress={() => router.back()} />
+            <Text style={[styles.mapHeaderTitle, { color: colors.textPrimary }]}>{t('map_view', language)}</Text>
+          </View>
+          <Text style={[styles.mapHeaderSubtitle, { color: colors.textMuted }]}>
+            {language === 'ja' ? 'ピンをタップしてプレイヤー詳細を表示' : 'Tap pins to view player details'}
+          </Text>
+        </View>
+      </SafeAreaView>
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -167,8 +178,11 @@ export default function MapScreen() {
 
       {/* 現在地へジャンプ FAB */}
       {userLocation && (
-        <Pressable style={[styles.fab, { backgroundColor: colors.surface }]} onPress={goToCurrentLocation}>
-          <Navigation size={22} color={colors.blue} />
+        <Pressable style={[styles.fab, { backgroundColor: colors.card }]} onPress={goToCurrentLocation}>
+          <View style={[styles.fabIconWrap, { backgroundColor: colors.blueMuted }]}>
+            <Navigation size={22} color={colors.blue} />
+          </View>
+          <Text style={[styles.fabLabel, { color: colors.textSecondary }]}>{t('go_to_current_location', language)}</Text>
         </Pressable>
       )}
 
@@ -228,20 +242,71 @@ function createStyles(colors: ThemeColors) {
     map: {
       flex: 1,
     },
+    mapHeader: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+    },
+    mapHeaderBar: {
+      marginHorizontal: 16,
+      marginTop: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      paddingRight: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      ...Platform.select({
+        web: { boxShadow: '0 2px 12px rgba(0,0,0,0.08)' },
+        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
+        default: { elevation: 4 },
+      }),
+    },
+    mapHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    mapHeaderTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      marginLeft: 4,
+    },
+    mapHeaderSubtitle: {
+      fontSize: 12,
+      marginTop: 2,
+    },
     fab: {
       position: 'absolute',
-      bottom: 24,
+      bottom: 28,
       right: 20,
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      gap: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      paddingLeft: 12,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
       ...Platform.select({
-        web: { boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
+        web: { boxShadow: '0 4px 16px rgba(0,0,0,0.12)' },
+        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 16 },
         default: { elevation: 8 },
       }),
+    },
+    fabIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    fabLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      paddingRight: 4,
     },
     sheetBackdrop: {
       flex: 1,

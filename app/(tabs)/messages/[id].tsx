@@ -356,8 +356,12 @@ function MessageBubble({
 
         {/* Translate button - for text messages from others */}
         {hasTranslatableText && !isMe && isLast && (
-          <Pressable onPress={handleTranslate} disabled={isTranslating} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, marginLeft: 4 }}>
-            <Languages size={12} color={colors.textMuted} />
+          <Pressable onPress={handleTranslate} disabled={isTranslating} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginLeft: 4, paddingVertical: 2 }}>
+            {isTranslating ? (
+              <ActivityIndicator size="small" color={colors.gold} style={{ transform: [{ scale: 0.8 }] }} />
+            ) : (
+              <Languages size={12} color={colors.textMuted} />
+            )}
             <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '500' }}>
               {isTranslating ? (language === 'ja' ? '翻訳中...' : 'Translating...') : translatedText ? t('original', language) : t('translate', language)}
             </Text>
