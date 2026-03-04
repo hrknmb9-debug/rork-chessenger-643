@@ -13,7 +13,7 @@ import { supabase } from '@/utils/supabaseClient';
 
 const TRANSLATE_CACHE_KEY = 'chess_translate_cache';
 const CACHE_MAX_ENTRIES = 500;
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 const TRANSLATE_DEBUG = __DEV__;
 
 export type TranslateResult = { text: string } | { error: string };
@@ -166,17 +166,17 @@ function parseJsonFromArrayBuffer(buf: ArrayBuffer): Record<string, unknown> | n
 }
 
 /**
- * RN iOS/Android: fetch の res.arrayBuffer() が未実装（FileReader.readAsArrayBuffer is not implemented）
- * のため XMLHttpRequest を使用。XHR は responseType: 'arraybuffer' をサポート
+ * XHR で responseType: 'text' を使用して JSON 取得
+ * iOS: arraybuffer が undefined になる場合があるため、text が確実
  */
-function fetchJsonViaXHR(
+function fetchJsonViaXHRText(
   url: string,
   options: { method?: string; headers?: Record<string, string>; body?: string }
 ): Promise<Record<string, unknown> | null> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open(options.method ?? 'GET', url, true);
-    xhr.responseType = 'arraybuffer';
+    xhr.responseType = 'text'; // text は RN iOS で確実に動作
     xhr.timeout = 30000;
     const headers = options.headers ?? {};
     for (const [k, v] of Object.entries(headers)) {
@@ -184,8 +184,17 @@ function fetchJsonViaXHR(
     }
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        const buf = xhr.response as ArrayBuffer;
-        resolve(parseJsonFromArrayBuffer(buf));
+        const raw = xhr.responseText ?? xhr.response;
+        if (typeof raw === 'string' && raw.trim()) {
+          try {
+            resolve(JSON.parse(raw.trim()) as Record<string, unknown>);
+          } catch (e) {
+            if (TRANSLATE_DEBUG) console.warn('[translate] XHR JSON parse failed:', e);
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
       } else {
         if (TRANSLATE_DEBUG) console.warn('[translate] XHR status', xhr.status);
         resolve(null);
@@ -202,6 +211,9 @@ function fetchJsonViaXHR(
     xhr.send(options.body ?? null);
   });
 }
+
+/** RN iOS/Android 用: XHR responseType 'text' で JSON 取得（arraybuffer は iOS で未実装のため） */
+const fetchJsonViaXHR = fetchJsonViaXHRText;
 
 /**
  * fetch レスポンスを JSON にパース
@@ -246,10 +258,19 @@ async function translateViaEdgeFunction(
     if (TRANSLATE_DEBUG) console.log('[translate] POST', url, 'target:', targetLang, 'len:', text.length);
 
     if (Platform.OS !== 'web') {
-      // RN iOS/Android: fetch の arrayBuffer() が未実装 → XHR 使用
-      const data = await fetchJsonViaXHR(url, { method: 'POST', headers, body: bodyStr });
+      // RN iOS/Android: XHR responseType 'text' で確実に取得
+      let data = await fetchJsonViaXHR(url, { method: 'POST', headers, body: bodyStr });
       if (!data) {
-        if (TRANSLATE_DEBUG) console.warn('[translate] XHR empty or invalid response');
+        // フォールバック: fetch + res.json()（内部処理が異なる場合がある）
+        try {
+          const res = await fetch(url, { method: 'POST', headers, body: bodyStr });
+          if (res.ok) data = await res.json();
+        } catch (e) {
+          if (TRANSLATE_DEBUG) console.warn('[translate] fetch fallback failed:', e);
+        }
+      }
+      if (!data) {
+        if (TRANSLATE_DEBUG) console.warn('[translate] empty or invalid response');
         return null;
       }
       const err = data.error as string | undefined;
@@ -317,7 +338,15 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
   const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`;
 
   if (Platform.OS !== 'web') {
-    const data = await fetchJsonViaXHR(url, { method: 'GET' });
+    let data = await fetchJsonViaXHR(url, { method: 'GET' });
+    if (!data) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) data = await res.json();
+      } catch {
+        /* ignore */
+      }
+    }
     if (!data) return null;
     const raw = data?.responseData?.translatedText as string | undefined;
     if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
