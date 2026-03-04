@@ -68,7 +68,7 @@ export async function getOpponentPushToken(opponentId: string): Promise<string |
       .from('profiles')
       .select('expo_push_token')
       .eq('id', opponentId)
-      .single();
+      .maybeSingle();
 
     if (error || !data?.expo_push_token) {
       console.log('Notifications: No push token for opponent', opponentId);

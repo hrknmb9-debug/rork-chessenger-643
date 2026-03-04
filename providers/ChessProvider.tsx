@@ -312,7 +312,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (data && !error) {
         const player = supabaseProfileToPlayer(data, userLocation?.latitude, userLocation?.longitude);
@@ -576,15 +576,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         if (userId) {
           await supabaseNoAuth.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', userId);
 
-          // #region agent log
-          const { data: { session } } = await supabase.auth.getSession();
-          fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2421b3'},body:JSON.stringify({sessionId:'2421b3',location:'ChessProvider.tsx:loadSupabaseData',message:'profiles fetch before',data:{userId,hasSession:!!session},hypothesisId:'H-A,H-B,H-D',timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           const { data: profileData, error: profileError } = await supabaseNoAuth
             .from('profiles')
             .select('*')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
           if (profileData && !profileError) {
             console.log('ChessProvider: Loaded profile from Supabase', profileData.name);
@@ -619,11 +615,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             });
             setProfileLoaded(true);
           } else {
-            // #region agent log
-            const errObj = profileError as { code?: string; message?: string; details?: string } | undefined;
-            fetch('http://127.0.0.1:7660/ingest/5c343937-8fec-4649-92d9-59dec881973f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2421b3'},body:JSON.stringify({sessionId:'2421b3',location:'ChessProvider.tsx:loadSupabaseData',message:'profiles fetch error',data:{userId,errorCode:errObj?.code,errorMessage:errObj?.message,errorDetails:errObj?.details},hypothesisId:'H-A,H-B,H-C',timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
-            console.log('ChessProvider: No profile found in Supabase, using defaults');
+            if (profileError) console.log('ChessProvider: Profile fetch error', profileError.message);
+            else console.log('ChessProvider: No profile found in Supabase, using defaults');
             setProfileLoaded(true);
           }
         }
@@ -838,7 +831,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (profileData && !error) {
         setProfile({
@@ -1593,7 +1586,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .from('profiles')
         .select('rating, games_played, wins, losses, draws')
         .eq('id', opponentId)
-        .single();
+        .maybeSingle();
 
       const opponentRating = opponentProfile?.rating || 1200;
       const isDraw = myResult === 'draw';
