@@ -607,13 +607,15 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         }
         }
 
-        const { data: postsData } = await supabase
+        const { data: postsData, error: postsError } = await supabase
           .from('posts')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(50);
 
-        if (postsData && postsData.length > 0) {
+        if (postsError) {
+          console.log('ChessProvider: posts fetch error, keeping previous timeline', postsError.message);
+        } else if (postsData && postsData.length > 0) {
           const postIds = postsData.map((p: SupabasePost) => p.id);
 
           const { data: commentsData } = await supabase
@@ -656,13 +658,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
           );
           console.log('ChessProvider: Loaded', built.length, 'timeline posts from Supabase');
-        } else {
+        } else if (postsData && postsData.length === 0) {
           setTimelinePosts(prev => {
             const merged = mergeRecentOwnPosts(userId, [], prev, RECENT_OWN_POST_WINDOW_MS);
             const result = merged.length > 0 ? merged : [];
             return applyEventCacheToPosts(result, prev);
           });
         }
+        /* postsError の場合は既存 timeline を維持（他プレイヤー投稿が消えないようにする） */
 
         if (userId) {
         const { data: notifsData } = await supabase
@@ -983,10 +986,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         table: 'posts',
       }, (payload) => {
         const row = payload.new as SupabasePost;
-        if (row.user_id !== currentUserId) return;
+        if (row.user_id !== currentUserId) {
+          refreshTimeline();
+          return;
+        }
         setTimelinePosts(prev => {
           if (prev.some(p => p.id === row.id)) return prev;
           const author = { ...profile, distance: 0 };
+          const isEvent = (row.type as string) === 'event';
           const newPost: TimelinePost = {
             id: row.id,
             author,
@@ -998,11 +1005,28 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             likes: [],
             comments: [],
           };
+          if (isEvent) {
+            refreshTimeline();
+            return prev;
+          }
           return [newPost, ...prev];
         });
       })
       .subscribe((status) => {
         console.log('Realtime: Posts subscription status:', status);
+      }) : null;
+
+    const eventsChannel = currentUserId ? supabase
+      .channel('events-realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'events',
+      }, () => {
+        refreshTimeline();
+      })
+      .subscribe((status) => {
+        console.log('Realtime: Events subscription status:', status);
       }) : null;
 
     return () => {
@@ -1011,8 +1035,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       supabase.removeChannel(profilesChannel);
       if (notificationsChannel) supabase.removeChannel(notificationsChannel);
       if (postsChannel) supabase.removeChannel(postsChannel);
+      if (eventsChannel) supabase.removeChannel(eventsChannel);
     };
-  }, [userLocation, currentUserId, fetchPlayerProfile, fetchUnreadCountByUser, profile]);
+  }, [userLocation, currentUserId, fetchPlayerProfile, fetchUnreadCountByUser, profile, refreshTimeline]);
 
   const players = useMemo(() => {
     return supabasePlayers.filter(p => !blockedUsers.includes(p.id));
@@ -1059,12 +1084,16 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: postsData } = await supabase
+      const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
 
+      if (postsError) {
+        console.log('ChessProvider: refresh posts error, keeping previous timeline', postsError.message);
+        return;
+      }
       if (postsData && postsData.length > 0) {
         const postIds = postsData.map((p: SupabasePost) => p.id);
 
