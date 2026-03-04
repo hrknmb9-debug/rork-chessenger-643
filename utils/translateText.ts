@@ -2,7 +2,9 @@
  * テキスト翻訳ユーティリティ
  * Supabase Edge Function または MyMemory 無料API を使用
  * 翻訳結果は AsyncStorage にキャッシュし API クォータを節約
- * 全プラットフォーム: arrayBuffer + TextDecoder（iOS の res.text はキリル破損するため不使用）
+ *
+ * iOS/Android: RN の fetch で res.arrayBuffer() が未実装のため XMLHttpRequest を使用
+ * Web: fetch + arrayBuffer を使用
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -150,20 +152,68 @@ function decodeUtf8FromBuffer(buf: ArrayBuffer): string {
   return s;
 }
 
-/**
- * fetch レスポンスを JSON にパース
- * 全プラットフォーム: arrayBuffer + TextDecoder で UTF-8 を確実に処理
- * （iOS の res.text() はキリル・日本語等のマルチバイトで破損するため使用しない）
- */
-async function parseJsonFromResponse(res: Response): Promise<Record<string, unknown> | null> {
+/** ArrayBuffer から JSON をパース */
+function parseJsonFromArrayBuffer(buf: ArrayBuffer): Record<string, unknown> | null {
   try {
-    const buf = await res.arrayBuffer();
     if (buf && buf.byteLength > 0) {
       const rawText = decodeUtf8FromBuffer(buf);
       if (rawText?.trim()) return JSON.parse(rawText) as Record<string, unknown>;
     }
   } catch (e) {
-    if (TRANSLATE_DEBUG) console.warn('[translate] parseJsonFromResponse failed:', e);
+    if (TRANSLATE_DEBUG) console.warn('[translate] parseJsonFromArrayBuffer failed:', e);
+  }
+  return null;
+}
+
+/**
+ * RN iOS/Android: fetch の res.arrayBuffer() が未実装（FileReader.readAsArrayBuffer is not implemented）
+ * のため XMLHttpRequest を使用。XHR は responseType: 'arraybuffer' をサポート
+ */
+function fetchJsonViaXHR(
+  url: string,
+  options: { method?: string; headers?: Record<string, string>; body?: string }
+): Promise<Record<string, unknown> | null> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method ?? 'GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.timeout = 30000;
+    const headers = options.headers ?? {};
+    for (const [k, v] of Object.entries(headers)) {
+      xhr.setRequestHeader(k, v);
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const buf = xhr.response as ArrayBuffer;
+        resolve(parseJsonFromArrayBuffer(buf));
+      } else {
+        if (TRANSLATE_DEBUG) console.warn('[translate] XHR status', xhr.status);
+        resolve(null);
+      }
+    };
+    xhr.onerror = () => {
+      if (TRANSLATE_DEBUG) console.warn('[translate] XHR network error');
+      resolve(null);
+    };
+    xhr.ontimeout = () => {
+      if (TRANSLATE_DEBUG) console.warn('[translate] XHR timeout');
+      resolve(null);
+    };
+    xhr.send(options.body ?? null);
+  });
+}
+
+/**
+ * fetch レスポンスを JSON にパース
+ * - RN iOS/Android: res.arrayBuffer() が未実装のため null を返し、呼び出し側で XHR を使う
+ * - Web: arrayBuffer 使用
+ */
+async function parseJsonFromFetchResponse(res: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const buf = await res.arrayBuffer();
+    return parseJsonFromArrayBuffer(buf);
+  } catch (e) {
+    if (TRANSLATE_DEBUG) console.warn('[translate] parseJsonFromFetchResponse failed:', e);
   }
   return null;
 }
@@ -186,20 +236,35 @@ async function translateViaEdgeFunction(
   }
 
   const doFetch = async (): Promise<TranslateResult | null> => {
+    const url = `${SUPABASE_URL}/functions/v1/translate`;
+    const bodyStr = JSON.stringify({ text, targetLang, sourceLang });
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+    if (TRANSLATE_DEBUG) console.log('[translate] POST', url, 'target:', targetLang, 'len:', text.length);
+
+    if (Platform.OS !== 'web') {
+      // RN iOS/Android: fetch の arrayBuffer() が未実装 → XHR 使用
+      const data = await fetchJsonViaXHR(url, { method: 'POST', headers, body: bodyStr });
+      if (!data) {
+        if (TRANSLATE_DEBUG) console.warn('[translate] XHR empty or invalid response');
+        return null;
+      }
+      const err = data.error as string | undefined;
+      if (err) {
+        if (TRANSLATE_DEBUG) console.warn('[translate] API error:', err);
+        return null;
+      }
+      const raw = (data.translatedText ?? data.text) as string | undefined;
+      if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
+      return null;
+    }
+
     try {
-      const url = `${SUPABASE_URL}/functions/v1/translate`;
-      const body = { text, targetLang, sourceLang };
-      const headers: Record<string, string> = {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
-      if (TRANSLATE_DEBUG) console.log('[translate] POST', url, 'target:', targetLang, 'len:', text.length);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await parseJsonFromResponse(res);
+      const res = await fetch(url, { method: 'POST', headers, body: bodyStr });
+      const data = await parseJsonFromFetchResponse(res);
       if (!data) {
         if (TRANSLATE_DEBUG) console.warn('[translate] Empty or invalid response');
         return null;
@@ -247,13 +312,22 @@ async function translateViaEdgeFunction(
  */
 async function translateViaMyMemory(text: string, targetLang: string, sourceLang: string): Promise<TranslateResult | null> {
   if (sourceLang === targetLang) return { text };
+  const langpair = `${sourceLang}|${targetLang}`;
+  const encoded = encodeURIComponent(text.slice(0, 500));
+  const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`;
+
+  if (Platform.OS !== 'web') {
+    const data = await fetchJsonViaXHR(url, { method: 'GET' });
+    if (!data) return null;
+    const raw = data?.responseData?.translatedText as string | undefined;
+    if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
+    return null;
+  }
+
   try {
-    const langpair = `${sourceLang}|${targetLang}`;
-    const encoded = encodeURIComponent(text.slice(0, 500));
-    const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`;
     const res = await fetch(url);
     if (!res.ok) return null;
-    const data = await parseJsonFromResponse(res);
+    const data = await parseJsonFromFetchResponse(res);
     if (!data) return null;
     const raw = data?.responseData?.translatedText as string | undefined;
     if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
