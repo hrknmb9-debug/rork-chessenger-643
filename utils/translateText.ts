@@ -11,18 +11,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { supabase } from '@/utils/supabaseClient';
 
-/** iOS 同時接続制限対応: 並列翻訳を最大 CONCURRENT_TRANSLATE に制限 */
-const CONCURRENT_TRANSLATE = 4;
+/** iOS 同時接続制限対応: iOS は逐次処理（1件）、他は最大4件 */
+const CONCURRENT_IOS = 1;
+const CONCURRENT_OTHER = 4;
 let activeCount = 0;
 const waiting: Array<() => void> = [];
 
 async function withLimit<T>(fn: () => Promise<T>): Promise<T> {
-  while (activeCount >= CONCURRENT_TRANSLATE) {
+  const limit = Platform.OS === 'ios' ? CONCURRENT_IOS : CONCURRENT_OTHER;
+  while (activeCount >= limit) {
     await new Promise<void>(resolve => { waiting.push(resolve); });
   }
   activeCount++;
   try {
-    return await fn();
+    const result = await fn();
+    if (Platform.OS === 'ios') {
+      await new Promise(r => setTimeout(r, 50)); // 逐次間のディレイ（接続確実性）
+    }
+    return result;
   } finally {
     activeCount--;
     waiting.shift()?.();
@@ -189,19 +195,30 @@ function parseJsonFromArrayBuffer(buf: ArrayBuffer): Record<string, unknown> | n
   return null;
 }
 
+/** キャッシュバスティング: iOS で通信キャッシュを回避 */
+function withCacheBust(url: string): string {
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}t=${Date.now()}`;
+}
+
+/** iOS: 5秒タイムアウト、1回リトライ */
+const XHR_TIMEOUT_MS = Platform.OS === 'ios' ? 5000 : 30000;
+
 /**
  * XHR で responseType: 'text' を使用して JSON 取得
  * iOS: arraybuffer が undefined になる場合があるため、text が確実
  */
 function fetchJsonViaXHRText(
   url: string,
-  options: { method?: string; headers?: Record<string, string>; body?: string }
+  options: { method?: string; headers?: Record<string, string>; body?: string },
+  isRetry = false
 ): Promise<Record<string, unknown> | null> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open(options.method ?? 'GET', url, true);
+    const targetUrl = options.method === 'POST' ? url : withCacheBust(url);
+    xhr.open(options.method ?? 'GET', targetUrl, true);
     xhr.responseType = 'text'; // text は RN iOS で確実に動作
-    xhr.timeout = 30000;
+    xhr.timeout = XHR_TIMEOUT_MS;
     const headers = options.headers ?? {};
     for (const [k, v] of Object.entries(headers)) {
       xhr.setRequestHeader(k, v);
@@ -237,7 +254,14 @@ function fetchJsonViaXHRText(
       resolve(null);
     };
     xhr.ontimeout = () => {
-      if (TRANSLATE_DEBUG) console.warn('[translate] XHR timeout');
+      if (__DEV__ && Platform.OS === 'ios') console.warn('[translate:ios] XHR timeout', isRetry ? '(retry failed)' : '');
+      if (!isRetry && Platform.OS === 'ios') {
+        const base = url.split('?')[0] || url;
+        const retryUrl = `${base}?t=${Date.now()}`;
+        if (__DEV__) console.log('[translate:ios] Retrying once, new URL=', retryUrl);
+        fetchJsonViaXHRText(retryUrl, options, true).then(resolve);
+        return;
+      }
       resolve(null);
     };
     xhr.send(options.body ?? null);
@@ -245,7 +269,13 @@ function fetchJsonViaXHRText(
 }
 
 /** RN iOS/Android 用: XHR responseType 'text' で JSON 取得（arraybuffer は iOS で未実装のため） */
-const fetchJsonViaXHR = fetchJsonViaXHRText;
+function fetchJsonViaXHR(
+  url: string,
+  options: { method?: string; headers?: Record<string, string>; body?: string },
+  isRetry?: boolean
+): Promise<Record<string, unknown> | null> {
+  return fetchJsonViaXHRText(url, options, isRetry ?? false);
+}
 
 /**
  * fetch レスポンスを JSON にパース
@@ -280,12 +310,13 @@ async function translateViaEdgeFunction(
   }
 
   const doFetch = async (): Promise<TranslateResult | null> => {
-    const url = `${SUPABASE_URL}/functions/v1/translate`;
+    const url = `${SUPABASE_URL}/functions/v1/translate?t=${Date.now()}`;
     const bodyStr = JSON.stringify({ text, targetLang, sourceLang });
     const headers: Record<string, string> = {
       'Accept': 'application/json; charset=utf-8',
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json; charset=utf-8',
+      ...(Platform.OS === 'ios' ? { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } : {}),
     };
     if (__DEV__ && Platform.OS === 'ios') {
       console.log('[translate:ios] === Request before send ===');
@@ -298,20 +329,34 @@ async function translateViaEdgeFunction(
       // RN iOS/Android: XHR responseType 'text' で確実に取得、一度 text で受け取り JSON.parse
       let data = await fetchJsonViaXHR(url, { method: 'POST', headers, body: bodyStr });
       if (!data) {
-        // フォールバック: fetch + res.text()（response.json() は使わない）
-        try {
-          const res = await fetch(url, { method: 'POST', headers, body: bodyStr });
-          if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Fetch fallback status=', res.status);
-          const rawText = await res.text();
-          if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Fetch fallback raw (preview):', rawText?.slice(0, 200) ?? '');
-          if (res.ok && rawText?.trim()) {
-            try {
-              data = JSON.parse(rawText.trim()) as Record<string, unknown>;
-              if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Fetch fallback JSON parse OK');
-            } catch (pe) {
-              if (__DEV__ && Platform.OS === 'ios') console.warn('[translate:ios] Fetch fallback parse failed:', pe);
+        // フォールバック: fetch + res.text()（response.json() は使わない）+ 5秒タイムアウト・1回リトライ
+        const tryFetch = async (targetUrl: string, retry = false): Promise<Record<string, unknown> | null> => {
+          const controller = new AbortController();
+          const to = setTimeout(() => controller.abort(), 5000);
+          try {
+            const res = await fetch(targetUrl, { method: 'POST', headers, body: bodyStr, signal: controller.signal });
+            const rawText = await res.text();
+            if (res.ok && rawText?.trim()) {
+              try {
+                return JSON.parse(rawText.trim()) as Record<string, unknown>;
+              } catch {
+                return null;
+              }
             }
+            return null;
+          } catch (e) {
+            if (!retry && Platform.OS === 'ios') {
+              if (__DEV__) console.log('[translate:ios] Fetch timeout/error, retrying once...');
+              return tryFetch(`${SUPABASE_URL}/functions/v1/translate?t=${Date.now()}`, true);
+            }
+            return null;
+          } finally {
+            clearTimeout(to);
           }
+        };
+        try {
+          data = await tryFetch(url);
+          if (data && __DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Fetch fallback OK');
         } catch (e) {
           if (__DEV__ && Platform.OS === 'ios') console.warn('[translate:ios] Fetch fallback error:', e);
         }
@@ -393,7 +438,7 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
   if (sourceLang === targetLang) return { text };
   const langpair = `${sourceLang}|${targetLang}`;
   const encoded = encodeURIComponent(text.slice(0, 500));
-  const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`;
+  const url = withCacheBust(`https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`);
 
   const myMemoryHeaders = { 'Accept': 'application/json; charset=utf-8' };
   if (Platform.OS !== 'web') {

@@ -4,9 +4,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Max-Age': '86400', // iOS: プリフライトの頻繁な送信を抑制
   'Content-Type': 'application/json; charset=utf-8', // iOS 絵文字・特殊文字の文字化け防止
 };
 
