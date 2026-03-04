@@ -30,6 +30,7 @@ if (!global._supabaseSingleton) {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: Platform.OS === 'web',
+      lockAcquireTimeout: 30000,
     },
     realtime: {
       params: { eventsPerSecond: 5 },

@@ -383,7 +383,7 @@ async function translateViaEdgeFunction(
 ): Promise<TranslateResult | null> {
   const sanitized = sanitizePayload(text);
   let token = accessToken ?? SUPABASE_ANON_KEY;
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' && (!token || token === SUPABASE_ANON_KEY)) {
     try {
       const { data: refreshed } = await supabase.auth.refreshSession();
       if (refreshed?.session?.access_token) {

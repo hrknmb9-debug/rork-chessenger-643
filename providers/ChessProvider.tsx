@@ -228,6 +228,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [supabasePlayers, setSupabasePlayers] = useState<Player[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [activeUsersCount, setActiveUsersCount] = useState<number>(0);
   const [authReady, setAuthReady] = useState<boolean>(false);
   const [unreadCountByUserId, setUnreadCountByUserId] = useState<Record<string, number>>({});
@@ -240,13 +241,25 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const realtimeErrorLogLast = useRef<Record<string, number>>({});
 
   useEffect(() => {
+    const initSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setAccessToken(session?.access_token ?? null);
+        if (session?.user) setCurrentUserId(session.user.id);
+      } catch {
+        /* lock timeout etc. - onAuthStateChange will update */
+      }
+    };
+    initSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('ChessProvider: Auth state changed', event, session?.user?.id);
+      setAccessToken(session?.access_token ?? null);
       if (event === 'SIGNED_IN' && session?.user) {
         setCurrentUserId(session.user.id);
         setAuthReady(prev => !prev);
       } else if (event === 'SIGNED_OUT') {
         setCurrentUserId(null);
+        setAccessToken(null);
         setProfile(defaultProfile);
         setProfileLoaded(false);
         setSupabasePlayers([]);
@@ -2287,6 +2300,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     unreadTimelineNotificationCount,
     activeUsersCount,
     currentUserId,
+    accessToken,
     sendMatchRequest,
     respondToMatch,
     cancelMatch,

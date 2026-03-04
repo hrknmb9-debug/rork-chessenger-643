@@ -63,12 +63,14 @@ function CommentItem({
   language,
   colors,
   setTranslationLock,
+  accessToken,
 }: {
   comment: TimelineComment;
   onReply: (commentId: string) => void;
   language: string;
   colors: ThemeColors;
   setTranslationLock?: (active: boolean) => void;
+  accessToken?: string | null;
 }) {
   const [translationState, setTranslationState] = useState<{ localTranslatedContent: string | null; loading: boolean; renderKey?: number; displayReady: boolean }>({ localTranslatedContent: null, loading: false, displayReady: true });
   const commentText = language === 'en' && comment.contentEn ? comment.contentEn : comment.content;
@@ -117,8 +119,7 @@ function CommentItem({
     setTranslationState(prev => ({ ...prev, loading: true }));
     let didSetResult = false;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const result = await translateText(commentText, getTargetLanguage(language), session?.access_token, { itemId: comment.id });
+      const result = await translateText(commentText, getTargetLanguage(language), accessToken ?? undefined, { itemId: comment.id });
       if ('text' in result) {
         const decoded = decodeForDisplay(result.text);
         if (decoded.trim() && Platform.OS !== 'ios') {
@@ -134,7 +135,7 @@ function CommentItem({
       if (!didSetResult) setTranslationState(prev => ({ ...prev, loading: false, displayReady: true }));
       setTranslationLock?.(false);
     }
-  }, [commentText, language, translationState.localTranslatedContent, translationState.loading, setTranslationLock]);
+  }, [commentText, language, translationState.localTranslatedContent, translationState.loading, setTranslationLock, accessToken]);
 
   return (
     <View>
@@ -199,7 +200,7 @@ function PostCard({
   language: string;
 }) {
   const { colors } = useTheme();
-  const { currentUserId, joinEvent, leaveEvent, setTranslationLock } = useChess();
+  const { currentUserId, accessToken, joinEvent, leaveEvent, setTranslationLock } = useChess();
   const [showComments, setShowComments] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
   const [replyToId, setReplyToId] = useState<string | null>(null);
@@ -280,9 +281,8 @@ function PostCard({
     setContentTranslationState(prev => ({ ...prev, loading: true }));
     let didSetResult = false;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const targetLang = getTargetLanguage(language);
-      const result = await translateText(contentText, targetLang, session?.access_token, { itemId: `post-content-${post.id}` });
+      const result = await translateText(contentText, targetLang, accessToken ?? undefined, { itemId: `post-content-${post.id}` });
       if ('text' in result) {
         const decoded = decodeForDisplay(result.text);
         if (decoded.trim() && Platform.OS !== 'ios') {
@@ -298,7 +298,7 @@ function PostCard({
       if (!didSetResult) setContentTranslationState(prev => ({ ...prev, loading: false, displayReady: true }));
       setTranslationLock?.(false);
     }
-  }, [contentText, language, post.id, contentTranslationState.localTranslatedContent, contentTranslationState.loading, setTranslationLock]);
+  }, [contentText, language, post.id, contentTranslationState.localTranslatedContent, contentTranslationState.loading, setTranslationLock, accessToken]);
 
   const targetLang = getTargetLanguage(language);
   useEffect(() => {
@@ -311,8 +311,7 @@ function PostCard({
     setTranslatedEventLocation(null);
     let cancelled = false;
     const run = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = accessToken ?? undefined;
       const doSet = (setter: (v: string) => void, val: string, label: string) => {
         if (__DEV__ && Platform.OS === 'ios' && !val?.trim()) console.error('[translate:ios] ERROR: Result is empty or undefined');
         const fn = () => setter(val);
@@ -330,7 +329,7 @@ function PostCard({
     };
     run();
     return () => { cancelled = true; };
-  }, [post.event?.id, post.event?.title, post.event?.location, targetLang]);
+  }, [post.event?.id, post.event?.title, post.event?.location, targetLang, accessToken]);
 
   const displayEventTitle = translatedEventTitle ?? post.event?.title ?? '';
   const displayEventLocation = translatedEventLocation ?? post.event?.location ?? '';
@@ -576,6 +575,7 @@ function PostCard({
               language={language}
               colors={colors}
               setTranslationLock={setTranslationLock}
+              accessToken={accessToken}
             />
           ))}
           {replyToId && (
