@@ -3,8 +3,13 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p 30e8dzkl5ptrsftnsy7by --tunnel",
-    "start-web": "bunx rork start -p 30e8dzkl5ptrsftnsy7by --web --tunnel",
+    "start": "bunx rork start -p 30e8dzkl5ptrsftnsy7by --lan",
+    "start:tunnel": "bunx rork start -p 30e8dzkl5ptrsftnsy7by --tunnel",
+    "start:expo": "npx expo start --lan",
+    "start:expo-tunnel": "npx expo start --tunnel",
+    "start-web": "bunx rork start -p 30e8dzkl5ptrsftnsy7by --web --lan",
+    "start-web:tunnel": "bunx rork start -p 30e8dzkl5ptrsftnsy7by --web --tunnel",
+    "start-web:expo": "npx expo start --web",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 30e8dzkl5ptrsftnsy7by --web --tunnel",
     "lint": "expo lint"
   },

@@ -101,6 +101,14 @@ bun run start -- --ios
 bun run start -- --android
 ```
 
+### **Troubleshooting: sandbox.init failed (502)**
+
+If you see `sandbox.init failed: error code: 502`, the tunnel service may be unavailable. Try:
+
+- **`bun run start:expo`** — Uses Expo directly with local network (no tunnel)
+- **`bun run start-web:expo`** — Web preview via Expo (no Rork sandbox)
+- **`bun run start:tunnel`** — If you need tunnel, retry; 502 is often temporary
+
 ## How can I deploy this project?
 
 ### **Publish to App Store (iOS)**
