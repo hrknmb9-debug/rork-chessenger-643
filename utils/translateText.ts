@@ -278,8 +278,8 @@ function withCacheBust(url: string): string {
   return `${url}${sep}t=${Date.now()}`;
 }
 
-/** iOS: 5秒タイムアウト、1回リトライ */
-const XHR_TIMEOUT_MS = Platform.OS === 'ios' ? 5000 : 30000;
+/** iOS/Android: 15秒タイムアウト、1回リトライ（遅い回線での Network request failed を軽減） */
+const XHR_TIMEOUT_MS = Platform.OS === 'web' ? 30000 : 15000;
 
 /**
  * XHR で responseType: 'text' を使用して JSON 取得
@@ -383,11 +383,13 @@ async function translateViaEdgeFunction(
 ): Promise<TranslateResult | null> {
   const sanitized = sanitizePayload(text);
   let token = accessToken ?? SUPABASE_ANON_KEY;
-  try {
-    const { data: refreshed } = await supabase.auth.refreshSession();
-    if (refreshed?.session?.access_token) token = refreshed.session.access_token;
-  } catch {
-    /* use existing token */
+  if (Platform.OS === 'web') {
+    try {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      if (refreshed?.session?.access_token) token = refreshed.session.access_token;
+    } catch {
+      /* use existing token */
+    }
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     if (TRANSLATE_DEBUG) console.warn('[translate] Missing SUPABASE_URL or ANON_KEY');
@@ -417,7 +419,7 @@ async function translateViaEdgeFunction(
         // フォールバック: fetch + res.text()（response.json() は使わない）+ 5秒タイムアウト・1回リトライ
         const tryFetch = async (targetUrl: string, retry = false): Promise<Record<string, unknown> | null> => {
           const controller = new AbortController();
-          const to = setTimeout(() => controller.abort(), 5000);
+          const to = setTimeout(() => controller.abort(), 15000);
           try {
             const res = await fetch(targetUrl, { method: 'POST', headers, body: bodyStr, signal: controller.signal });
             const rawText = await res.text();
@@ -518,9 +520,8 @@ async function translateViaEdgeFunction(
     }
   };
 
-  // 可能性4: iOS では invoke をスキップして doFetch を直接使用（invoke 前後でログは doFetch 内で出力）
-  if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Skip supabase.functions.invoke, using direct fetch/XHR');
-  if (Platform.OS !== 'ios') {
+  // ネイティブ(iOS/Android): invoke の fetch が Network request failed を起こすことがあるため XHR/doFetch を直接使用
+  if (Platform.OS === 'web') {
     try {
       const { data, error } = await supabase.functions.invoke('translate', {
         body: { text: sanitized, targetLang, sourceLang },
@@ -542,7 +543,12 @@ async function translateViaEdgeFunction(
     }
   }
 
-  const result = await doFetch();
+  let result: TranslateResult | null = null;
+  try {
+    result = await doFetch();
+  } catch (e) {
+    if (TRANSLATE_DEBUG) console.warn('[translate] doFetch exception:', (e as Error)?.message ?? e);
+  }
   if (result) return result;
 
   return null;
@@ -622,38 +628,48 @@ export async function translateText(
   if (cached) return { text: safeDecodeTranslated(cached) };
 
   return withLimit(async () => {
-    if (__DEV__ && Platform.OS === 'ios') {
-      console.log('[translate:ios] ========== translateText START ==========');
-      console.log('[translate:ios] target=', normalizedTarget, 'source=', sourceLang);
-    }
-    const viaEdge = await translateViaEdgeFunction(sanitized, normalizedTarget, sourceLang, accessToken);
-    if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Edge result', viaEdge ? 'OK' : 'fallback/null');
-    if (viaEdge && 'text' in viaEdge) {
-      const decoded = safeDecodeTranslated(viaEdge.text);
-      if (decoded.trim() && decoded.trim() !== sanitized.trim()) {
-        setCache(sanitized, normalizedTarget, sourceLang, decoded);
+    try {
+      if (__DEV__ && Platform.OS === 'ios') {
+        console.log('[translate:ios] ========== translateText START ==========');
+        console.log('[translate:ios] target=', normalizedTarget, 'source=', sourceLang);
       }
-      if (options?.itemId) {
-        if (__DEV__ && Platform.OS === 'ios' && !decoded?.trim()) console.error('[translate:ios] ERROR: Result is empty or undefined');
-        emitTranslationComplete({ itemId: options.itemId, text: decoded });
+      let viaEdge: TranslateResult | null = null;
+      try {
+        viaEdge = await translateViaEdgeFunction(sanitized, normalizedTarget, sourceLang, accessToken);
+      } catch (e) {
+        if (TRANSLATE_DEBUG) console.warn('[translate] Edge function error:', (e as Error)?.message ?? e);
       }
-      return { text: decoded };
-    }
+      if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Edge result', viaEdge ? 'OK' : 'fallback/null');
+      if (viaEdge && 'text' in viaEdge) {
+        const decoded = safeDecodeTranslated(viaEdge.text);
+        if (decoded.trim() && decoded.trim() !== sanitized.trim()) {
+          setCache(sanitized, normalizedTarget, sourceLang, decoded);
+        }
+        if (options?.itemId) {
+          if (__DEV__ && Platform.OS === 'ios' && !decoded?.trim()) console.error('[translate:ios] ERROR: Result is empty or undefined');
+          emitTranslationComplete({ itemId: options.itemId, text: decoded });
+        }
+        return { text: decoded };
+      }
 
-    if (TRANSLATE_DEBUG) console.log('[translate] Edge failed, trying MyMemory');
-    const viaMyMemory = await translateViaMyMemory(sanitized, normalizedTarget, sourceLang);
-    if (viaMyMemory && 'text' in viaMyMemory) {
-      const decoded = safeDecodeTranslated(viaMyMemory.text);
-      if (decoded.trim() && decoded.trim() !== sanitized.trim()) {
-        setCache(sanitized, normalizedTarget, sourceLang, decoded);
+      if (TRANSLATE_DEBUG) console.log('[translate] Edge failed, trying MyMemory');
+      const viaMyMemory = await translateViaMyMemory(sanitized, normalizedTarget, sourceLang);
+      if (viaMyMemory && 'text' in viaMyMemory) {
+        const decoded = safeDecodeTranslated(viaMyMemory.text);
+        if (decoded.trim() && decoded.trim() !== sanitized.trim()) {
+          setCache(sanitized, normalizedTarget, sourceLang, decoded);
+        }
+        if (options?.itemId) {
+          if (__DEV__ && Platform.OS === 'ios' && !decoded?.trim()) console.error('[translate:ios] ERROR: Result is empty or undefined');
+          emitTranslationComplete({ itemId: options.itemId, text: decoded });
+        }
+        return { text: decoded };
       }
-      if (options?.itemId) {
-        if (__DEV__ && Platform.OS === 'ios' && !decoded?.trim()) console.error('[translate:ios] ERROR: Result is empty or undefined');
-        emitTranslationComplete({ itemId: options.itemId, text: decoded });
-      }
-      return { text: decoded };
-    }
 
-    return { error: 'Translation failed' };
+      return { error: 'Translation failed' };
+    } catch (e) {
+      if (TRANSLATE_DEBUG) console.warn('[translate] Network/other error:', (e as Error)?.message ?? e);
+      return { error: 'Translation failed' };
+    }
   });
 }
