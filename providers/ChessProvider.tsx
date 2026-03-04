@@ -16,6 +16,7 @@ import {
 import { playMessageNotificationSound } from '@/utils/messageNotificationSound';
 
 const LANGUAGE_KEY = 'chess_language';
+const EVENT_CACHE_KEY = 'chess_event_cache';
 
 interface SupabaseProfile {
   id: string;
@@ -164,6 +165,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const { userLocation, getDistanceToPlayer } = useLocation();
   const lastSeenInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const profileCacheRef = useRef<Map<string, Player>>(new Map());
+  const eventCacheRef = useRef<Map<string, TimelineEvent>>(new Map());
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -181,6 +183,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         setNotifications([]);
         setBlockedUsers([]);
         profileCacheRef.current.clear();
+        eventCacheRef.current.clear();
+        AsyncStorage.removeItem(EVENT_CACHE_KEY).catch(() => {});
       }
     });
     return () => { subscription.unsubscribe(); };
@@ -199,6 +203,26 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       }
     };
     loadLang();
+  }, []);
+
+  useEffect(() => {
+    const loadEventCache = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(EVENT_CACHE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as Array<[string, TimelineEvent]>;
+          const m = new Map<string, TimelineEvent>();
+          for (const [postId, ev] of parsed) {
+            if (postId && ev?.title) m.set(postId, ev);
+          }
+          eventCacheRef.current = m;
+          console.log('ChessProvider: Loaded event cache,', m.size, 'entries');
+        }
+      } catch (e) {
+        console.log('ChessProvider: Failed to load event cache', e);
+      }
+    };
+    loadEventCache();
   }, []);
 
   const fetchPlayerProfile = useCallback(async (userId: string): Promise<Player | null> => {
@@ -308,9 +332,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         };
       });
 
-      // posts.type が 'event' でなくても、events テーブルに紐づく行があればイベント投稿として扱う
+      // 投稿とイベントは post_id で紐づく（events.post_id = posts.id）
       const rawEvent = allEvents.find(
-        (e: Record<string, unknown>) => e.id === post.id || e.post_id === post.id
+        (e: Record<string, unknown>) => (e.post_id as string) === post.id
       ) as Record<string, unknown> | undefined;
 
       let postType: TimelinePost['type'] =
@@ -368,6 +392,26 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   }, [userLocation]);
 
   const RECENT_OWN_POST_WINDOW_MS = 3 * 60 * 1000;
+
+  const applyEventCacheToPosts = useCallback((posts: TimelinePost[]): TimelinePost[] => {
+    const cache = eventCacheRef.current;
+    if (cache.size === 0) return posts;
+    return posts.map(p => {
+      const cached = cache.get(p.id);
+      if (!cached) return p;
+      if (p.event) return p;
+      return { ...p, type: 'event' as const, event: cached };
+    });
+  }, []);
+
+  const persistEventCache = useCallback(async () => {
+    try {
+      const entries = Array.from(eventCacheRef.current.entries());
+      await AsyncStorage.setItem(EVENT_CACHE_KEY, JSON.stringify(entries));
+    } catch (e) {
+      console.log('ChessProvider: Failed to persist event cache', e);
+    }
+  }, []);
 
   const mergeRecentOwnPosts = useCallback((
     userId: string | null,
@@ -582,7 +626,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             .select('post_id, user_id')
             .in('post_id', postIds);
 
-          const { data: eventsData } = await supabase
+          const { data: eventsData } = await supabaseNoAuth
             .from('events')
             .select('*');
 
@@ -605,13 +649,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             blockedIds
           );
           setTimelinePosts(prev =>
-            mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS)
+            applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS))
           );
           console.log('ChessProvider: Loaded', built.length, 'timeline posts from Supabase');
         } else {
           setTimelinePosts(prev => {
             const merged = mergeRecentOwnPosts(userId, [], prev, RECENT_OWN_POST_WINDOW_MS);
-            return merged.length > 0 ? merged : [];
+            const result = merged.length > 0 ? merged : [];
+            return applyEventCacheToPosts(result);
           });
         }
 
@@ -648,7 +693,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       }
     };
     loadSupabaseData();
-  }, [userLocation, authReady, fetchPlayerProfile, buildTimelinePosts, mergeRecentOwnPosts]);
+  }, [userLocation, authReady, fetchPlayerProfile, buildTimelinePosts, mergeRecentOwnPosts, applyEventCacheToPosts]);
 
   const reloadProfile = useCallback(async () => {
     try {
@@ -1030,7 +1075,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           .select('post_id, user_id')
           .in('post_id', postIds);
 
-        const { data: eventsData } = await supabase.from('events').select('*');
+        const { data: eventsData } = await supabaseNoAuth.from('events').select('*');
         const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
         let epData: { event_id: string; user_id: string }[] = [];
         if (eventIds.length > 0) {
@@ -1050,7 +1095,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           blockedUsers
         );
         setTimelinePosts(prev =>
-          mergeRecentOwnPosts(user?.id ?? null, built, prev, RECENT_OWN_POST_WINDOW_MS)
+          applyEventCacheToPosts(mergeRecentOwnPosts(user?.id ?? null, built, prev, RECENT_OWN_POST_WINDOW_MS))
         );
         console.log('ChessProvider: Timeline refreshed with', built.length, 'posts');
 
@@ -1079,13 +1124,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       } else {
         setTimelinePosts(prev => {
           const merged = mergeRecentOwnPosts(user?.id ?? null, [], prev, RECENT_OWN_POST_WINDOW_MS);
-          return merged.length > 0 ? merged : [];
+          const result = merged.length > 0 ? merged : [];
+          return applyEventCacheToPosts(result);
         });
       }
     } catch (e) {
       console.log('ChessProvider: Timeline refresh failed', e);
     }
-  }, [blockedUsers, buildTimelinePosts, currentUserId, notifications, mergeRecentOwnPosts]);
+  }, [blockedUsers, buildTimelinePosts, currentUserId, notifications, mergeRecentOwnPosts, applyEventCacheToPosts]);
 
   const changeLanguage = useCallback(async (lang: Language) => {
     setLanguage(lang);
@@ -1781,6 +1827,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
               })
             );
           }
+          const cachedEvent: TimelineEvent = {
+            ...event,
+            id: (insertedEvent as { id?: string } | undefined)?.id ?? event.id,
+            createdAt: (insertedEvent as { created_at?: string } | undefined)?.created_at ?? event.createdAt,
+            deadlineAt: (insertedEvent as { deadline_at?: string | null } | undefined)?.deadline_at ?? event.deadlineAt ?? undefined,
+          };
+          eventCacheRef.current.set(insertedPost.id, cachedEvent);
+          persistEventCache();
         }
       }
     } catch (e) {
@@ -1788,7 +1842,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     }
 
     console.log('New timeline post added');
-  }, [profile]);
+  }, [profile, persistEventCache]);
 
   const joinEvent = useCallback(async (postId: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -1920,6 +1974,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     if (!user) return;
 
     setTimelinePosts(prev => prev.filter(p => p.id !== postId));
+    eventCacheRef.current.delete(postId);
+    persistEventCache();
 
     try {
       const { data: eventsForPost } = await supabase
@@ -1938,7 +1994,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     } catch (e) {
       console.log('ChessProvider: Post delete failed', e);
     }
-  }, []);
+  }, [persistEventCache]);
 
   const activeMatches = useMemo(
     () => matches.filter(m => m.status === 'accepted'),
