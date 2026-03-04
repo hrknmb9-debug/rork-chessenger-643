@@ -73,11 +73,27 @@ async function fillMissingEventDetails(
   postsData: SupabasePost[],
   client: ReturnType<typeof supabase>
 ): Promise<TimelinePost[]> {
-  const missingIds = built.filter(p => (p.type as string) === 'event' && !p.event).map(p => p.id);
-  if (missingIds.length === 0) return built;
+  const needsEvent = built.filter(p => !p.event).map(p => p.id);
+  if (needsEvent.length === 0) return built;
   let result = built;
-  for (const postId of missingIds) {
-    const { data: evRow } = await client.from('events').select('*').eq('post_id', postId).maybeSingle();
+  const { data: batchEvents } = await client.from('events').select('*').in('post_id', needsEvent);
+  const batchMap = new Map<string, Record<string, unknown>>();
+  if (batchEvents && batchEvents.length > 0) {
+    for (const e of batchEvents as Record<string, unknown>[]) {
+      const pid = String(e.post_id ?? '');
+      if (pid && needsEvent.includes(pid)) batchMap.set(pid, e);
+    }
+  }
+  for (const postId of needsEvent) {
+    let evRow = batchMap.get(postId) as Record<string, unknown> | undefined;
+    if (!evRow) {
+      const { data: single, error: evErr } = await client.from('events').select('*').eq('post_id', postId).maybeSingle();
+      if (evErr) {
+        console.log('ChessProvider: fillMissingEventDetails fetch error for', postId, evErr.message);
+        continue;
+      }
+      evRow = single ?? undefined;
+    }
     if (!evRow) continue;
     const { data: epRows } = await client.from('event_participants').select('user_id').eq('event_id', evRow.id);
     const participants = (epRows ?? []).map((r: { user_id: string }) => r.user_id);
@@ -106,7 +122,7 @@ async function fillMissingEventDetails(
       deadlineAt: (evRow.deadline_at as string) ?? undefined,
       isClosed: !!(evRow.closed_at as string | null),
     };
-    result = result.map(p => p.id === postId ? { ...p, event: timelineEvent } : p);
+    result = result.map(p => p.id === postId ? { ...p, type: 'event' as const, event: timelineEvent } : p);
   }
   return result;
 }
@@ -302,14 +318,8 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     let events = [...(allEvents ?? [])];
     let epData = [...allEventParticipants];
     const postIdSetFromPosts = new Set(posts.map(p => p.id));
-    const eventPostIds = [
-      ...new Set([
-        ...posts.filter(p => (p.type as string) === 'event').map(p => p.id),
-        ...events.map((e: Record<string, unknown>) => String(e.post_id ?? '')).filter(Boolean),
-      ]),
-    ].filter(id => postIdSetFromPosts.has(id));
     const hasEventFor = new Set(events.map((e: Record<string, unknown>) => String(e.post_id ?? '')));
-    const missingIds = eventPostIds.filter(id => !hasEventFor.has(id));
+    const missingIds = [...postIdSetFromPosts].filter(id => !hasEventFor.has(id));
     if (missingIds.length > 0) {
       let extra: Record<string, unknown>[] | null = null;
       const { data: extraIn } = await supabase.from('events').select('*').in('post_id', missingIds);
@@ -716,15 +726,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
           const postIdSet = new Set(postIds);
           let eventsData: Record<string, unknown>[] = [];
-          const { data: eventsFiltered, error: eventsErr } = await supabase
+          const { data: eventsIn, error: eventsInErr } = await supabase
             .from('events')
             .select('*')
             .in('post_id', postIds);
-          if (eventsErr) {
-            console.log('ChessProvider: events .in() error, trying full fetch', eventsErr.message);
-          }
-          if (eventsFiltered && eventsFiltered.length > 0) {
-            eventsData = eventsFiltered.filter((e: Record<string, unknown>) =>
+          if (eventsIn && eventsIn.length > 0) {
+            eventsData = eventsIn.filter((e: Record<string, unknown>) =>
               postIdSet.has(String(e.post_id ?? ''))
             );
           }
@@ -734,6 +741,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
               eventsData = eventsFull.filter((e: Record<string, unknown>) =>
                 postIdSet.has(String(e.post_id ?? ''))
               );
+            }
+            if (eventsData.length === 0 && eventsInErr) {
+              console.log('ChessProvider: events fetch', eventsInErr.message);
             }
           }
 
@@ -1212,15 +1222,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
         const postIdSet = new Set(postIds);
         let eventsData: Record<string, unknown>[] = [];
-        const { data: eventsFiltered, error: eventsErr } = await supabase
+        const { data: eventsIn, error: eventsInErr } = await supabase
           .from('events')
           .select('*')
           .in('post_id', postIds);
-        if (eventsErr) {
-          console.log('ChessProvider: events .in() error, trying full fetch', eventsErr.message);
-        }
-        if (eventsFiltered && eventsFiltered.length > 0) {
-          eventsData = eventsFiltered.filter((e: Record<string, unknown>) =>
+        if (eventsIn && eventsIn.length > 0) {
+          eventsData = eventsIn.filter((e: Record<string, unknown>) =>
             postIdSet.has(String(e.post_id ?? ''))
           );
         }
@@ -1230,6 +1237,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             eventsData = eventsFull.filter((e: Record<string, unknown>) =>
               postIdSet.has(String(e.post_id ?? ''))
             );
+          }
+          if (eventsData.length === 0 && eventsInErr) {
+            console.log('ChessProvider: refresh events fetch', eventsInErr.message);
           }
         }
         const eventIds = eventsData.map((e: Record<string, unknown>) => e.id as string);

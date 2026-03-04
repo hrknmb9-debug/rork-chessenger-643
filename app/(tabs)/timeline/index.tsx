@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeImage } from '@/components/SafeImage';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -417,6 +417,12 @@ export default function TimelineScreen() {
     await Promise.all([refreshPlayers(), refreshTimeline()]);
     setTimeout(() => setRefreshing(false), 800);
   }, [refreshPlayers, refreshTimeline]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshTimeline();
+    }, [refreshTimeline])
+  );
 
   const handleAuthorPress = useCallback((authorId: string) => {
     if (authorId === 'me' || authorId === currentUserId) return;
