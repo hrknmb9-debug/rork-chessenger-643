@@ -393,14 +393,15 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
   const RECENT_OWN_POST_WINDOW_MS = 3 * 60 * 1000;
 
-  const applyEventCacheToPosts = useCallback((posts: TimelinePost[]): TimelinePost[] => {
-    const cache = eventCacheRef.current;
-    if (cache.size === 0) return posts;
+  const applyEventCacheToPosts = useCallback((posts: TimelinePost[], prev?: TimelinePost[]): TimelinePost[] => {
+    const prevMap = prev?.length ? new Map(prev.map(p => [p.id, p])) : null;
     return posts.map(p => {
-      const cached = cache.get(p.id);
-      if (!cached) return p;
       if (p.event) return p;
-      return { ...p, type: 'event' as const, event: cached };
+      const prevPost = prevMap?.get(p.id);
+      if (prevPost?.event) return { ...p, type: 'event' as const, event: prevPost.event };
+      const cached = eventCacheRef.current.get(p.id);
+      if (cached) return { ...p, type: 'event' as const, event: cached };
+      return p;
     });
   }, []);
 
@@ -626,10 +627,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             .select('post_id, user_id')
             .in('post_id', postIds);
 
-          const { data: eventsData } = await supabase
+          const { data: eventsData, error: eventsError } = await supabase
             .from('events')
             .select('*')
             .in('post_id', postIds);
+
+          if (eventsError) console.log('ChessProvider: events fetch error', eventsError.message);
 
           const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
           let eventParticipantsData: { event_id: string; user_id: string }[] = [];
@@ -650,14 +653,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             blockedIds
           );
           setTimelinePosts(prev =>
-            applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS))
+            applyEventCacheToPosts(mergeRecentOwnPosts(userId, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
           );
           console.log('ChessProvider: Loaded', built.length, 'timeline posts from Supabase');
         } else {
           setTimelinePosts(prev => {
             const merged = mergeRecentOwnPosts(userId, [], prev, RECENT_OWN_POST_WINDOW_MS);
             const result = merged.length > 0 ? merged : [];
-            return applyEventCacheToPosts(result);
+            return applyEventCacheToPosts(result, prev);
           });
         }
 
@@ -1076,10 +1079,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           .select('post_id, user_id')
           .in('post_id', postIds);
 
-        const { data: eventsData } = await supabase
+        const { data: eventsData, error: eventsError } = await supabase
           .from('events')
           .select('*')
           .in('post_id', postIds);
+
+        if (eventsError) console.log('ChessProvider: events refresh error', eventsError.message);
         const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
         let epData: { event_id: string; user_id: string }[] = [];
         if (eventIds.length > 0) {
@@ -1099,7 +1104,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           blockedUsers
         );
         setTimelinePosts(prev =>
-          applyEventCacheToPosts(mergeRecentOwnPosts(user?.id ?? null, built, prev, RECENT_OWN_POST_WINDOW_MS))
+          applyEventCacheToPosts(mergeRecentOwnPosts(user?.id ?? null, built, prev, RECENT_OWN_POST_WINDOW_MS), prev)
         );
         console.log('ChessProvider: Timeline refreshed with', built.length, 'posts');
 
@@ -1129,7 +1134,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         setTimelinePosts(prev => {
           const merged = mergeRecentOwnPosts(user?.id ?? null, [], prev, RECENT_OWN_POST_WINDOW_MS);
           const result = merged.length > 0 ? merged : [];
-          return applyEventCacheToPosts(result);
+          return applyEventCacheToPosts(result, prev);
         });
       }
     } catch (e) {
