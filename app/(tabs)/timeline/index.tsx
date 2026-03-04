@@ -193,7 +193,7 @@ function PostCard({
       return;
     }
     setIsTranslating(true);
-    setTranslatedContent(null);
+    // 翻訳中は元テキストを表示し続ける（テキストが消えない）
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const targetLang = getTargetLanguage(language);
@@ -374,7 +374,9 @@ function PostCard({
       )}
 
       <View style={{ marginBottom: 12 }}>
-        <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22 }}>{displayContent}</Text>
+        <Text style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22 }}>
+          {isTranslating ? contentText : displayContent}
+        </Text>
         {isShowingTranslated && (
           <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
         )}

@@ -13,18 +13,23 @@ const CACHE_VERSION = 2;
 
 export type TranslateResult = { text: string } | { error: string };
 
-/** URLエンコードされた翻訳結果をデコード（文字化け対策） */
+/** URLエンコード・不正エンコーディングの翻訳結果をデコード（文字化け対策） */
 function safeDecodeTranslated(text: string): string {
   if (!text || typeof text !== 'string') return text;
   const trimmed = text.trim();
   if (trimmed.length === 0) return text;
   try {
+    // %XX 形式の URL エンコードがあればデコード
     if (/%[0-9A-Fa-f]{2}/.test(trimmed)) {
       const withoutSpaces = trimmed.replace(/\s+/g, '');
       const decoded = decodeURIComponent(withoutSpaces);
       if (decoded && decoded.length > 0 && !/%[0-9A-Fa-f]{2}/.test(decoded)) {
         return decoded;
       }
+    }
+    // 不完全な UTF-8 シーケンスや replacement char を検出した場合のフォールバック（念のため）
+    if (/\uFFFD/.test(trimmed)) {
+      return trimmed.replace(/\uFFFD/g, '');
     }
   } catch {
     // デコード失敗時は元の文字列を返す
@@ -139,7 +144,8 @@ async function translateViaEdgeFunction(
   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json; charset=utf-8',
         Authorization: `Bearer ${accessToken ?? SUPABASE_ANON_KEY}`,
       };
       const res = await fetch(`${SUPABASE_URL}/functions/v1/translate`, {
@@ -148,7 +154,7 @@ async function translateViaEdgeFunction(
         body: JSON.stringify({ text, targetLang, sourceLang }),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as Record<string, unknown>;
         const raw = data?.translatedText ?? data?.text;
         if (raw && typeof raw === 'string') {
           return { text: safeDecodeTranslated(raw) };

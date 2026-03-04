@@ -7,6 +7,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json; charset=utf-8',
 };
 
 function normalizeLang(lang: string): string {
@@ -63,7 +64,7 @@ serve(async (req) => {
     if (!text || typeof text !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Missing text' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders } }
       );
     }
     const target = normalizeLang(targetLang ?? 'en');
@@ -79,20 +80,28 @@ serve(async (req) => {
     if (!translated) {
       return new Response(
         JSON.stringify({ error: 'Translation failed' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders } }
       );
     }
-    const decoded = typeof translated === 'string' && /%[0-9A-Fa-f]{2}/.test(translated)
-      ? (() => { try { return decodeURIComponent(translated.replace(/\s+/g, '')); } catch { return translated; } })()
-      : translated;
+    // 文字化け対策: URLエンコードや不正エンコーディングをデコード
+    let output = translated;
+    if (typeof output === 'string' && /%[0-9A-Fa-f]{2}/.test(output)) {
+      try {
+        const decoded = decodeURIComponent(output.replace(/\s+/g, ''));
+        if (decoded && !/%[0-9A-Fa-f]{2}/.test(decoded)) output = decoded;
+      } catch {
+        // デコード失敗時は元の文字列を使用
+      }
+    }
+    // UTF-8 で正しく JSON シリアライズ（Deno はデフォルトで UTF-8）
     return new Response(
-      JSON.stringify({ translatedText: decoded }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ translatedText: output }),
+      { headers: { ...corsHeaders } }
     );
   } catch (e) {
     return new Response(
       JSON.stringify({ error: String(e) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders } }
     );
   }
 });

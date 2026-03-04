@@ -9,20 +9,19 @@ import {
   Alert,
   Modal,
   FlatList,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, MapPin, Clock, FileText, X, Check, Trophy, Flag, Globe, ChevronRight, Search } from 'lucide-react-native';
+import { Camera, MapPin, Clock, FileText, X, Check, Trophy, Flag, ChevronRight, Search } from 'lucide-react-native';
 import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { SkillLevel, PlayStyle } from '@/types';
-import { t, COUNTRY_OPTIONS, LANGUAGE_OPTIONS, getCountryFlag, getCountryName, getLanguageFlag, getLanguageName } from '@/utils/translations';
+import { t, COUNTRY_OPTIONS, getCountryFlag, getCountryName } from '@/utils/translations';
 import { supabaseNoAuth } from '@/utils/supabaseClient';
 import { BackNavButton } from '@/components/BackNavButton';
 
@@ -51,12 +50,9 @@ export default function EditProfileScreen() {
   const [chessComRating, setChessComRating] = useState<string>('');
   const [lichessRating, setLichessRating] = useState<string>('');
   const [country, setCountry] = useState<string>('');
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
-  const [showLanguagePicker, setShowLanguagePicker] = useState<boolean>(false);
   const [selectedPlayStyles, setSelectedPlayStyles] = useState<PlayStyle[]>([]);
   const [countrySearch, setCountrySearch] = useState<string>('');
-  const [languageSearch, setLanguageSearch] = useState<string>('');
   const [formInitialized, setFormInitialized] = useState<boolean>(false);
 
   useEffect(() => {
@@ -71,7 +67,6 @@ export default function EditProfileScreen() {
       setChessComRating(profile.chessComRating !== null ? String(profile.chessComRating) : '');
       setLichessRating(profile.lichessRating !== null ? String(profile.lichessRating) : '');
       setCountry(profile.country ?? '');
-      setSelectedLanguages(profile.languages);
       setSelectedPlayStyles(profile.playStyles ?? []);
       setFormInitialized(true);
     }
@@ -191,7 +186,6 @@ export default function EditProfileScreen() {
       lichessRating: parsedLichess !== null && !isNaN(parsedLichess) ? parsedLichess : null,
       rating: mainRating,
       country: country || undefined,
-      languages: selectedLanguages,
       playStyles: selectedPlayStyles,
     });
 
@@ -215,7 +209,7 @@ export default function EditProfileScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     }
-  }, [name, bio, location, avatar, skillLevel, timeControl, chessComRating, lichessRating, country, selectedLanguages, selectedPlayStyles, updateProfile, updateAuthProfile, reloadUser, language, router]);
+  }, [name, bio, location, avatar, skillLevel, timeControl, chessComRating, lichessRating, country, selectedPlayStyles, updateProfile, updateAuthProfile, reloadUser, language, router]);
 
   const filteredCountries = useMemo(() => {
     if (!countrySearch.trim()) return [...COUNTRY_OPTIONS];
@@ -225,20 +219,6 @@ export default function EditProfileScreen() {
       c.toLowerCase().includes(q)
     );
   }, [countrySearch, language]);
-
-  const filteredLanguages = useMemo(() => {
-    if (!languageSearch.trim()) return [...LANGUAGE_OPTIONS];
-    const q = languageSearch.toLowerCase();
-    return [...LANGUAGE_OPTIONS].filter(l =>
-      getLanguageName(l).toLowerCase().includes(q) ||
-      l.toLowerCase().includes(q)
-    );
-  }, [languageSearch]);
-
-  const selectedLanguageDisplay = useMemo(() => {
-    if (selectedLanguages.length === 0) return t('select_languages', language);
-    return selectedLanguages.map(l => `${getLanguageFlag(l)} ${getLanguageName(l)}`).join(', ');
-  }, [selectedLanguages, language]);
 
   const countryDisplay = useMemo(() => {
     if (!country) return t('select_country', language);
@@ -265,27 +245,6 @@ export default function EditProfileScreen() {
       </Pressable>
     );
   }, [country, language, colors, styles]);
-
-  const renderLanguageItem = useCallback(({ item }: { item: string }) => {
-    const isSelected = selectedLanguages.includes(item);
-    return (
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          setSelectedLanguages(prev =>
-            isSelected ? prev.filter(l => l !== item) : [...prev, item]
-          );
-        }}
-        style={[styles.pickerItem, isSelected && styles.pickerItemActive]}
-      >
-        <Text style={styles.pickerItemFlag}>{getLanguageFlag(item)}</Text>
-        <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextActive]}>
-          {getLanguageName(item)}
-        </Text>
-        {isSelected && <Check size={18} color={colors.gold} />}
-      </Pressable>
-    );
-  }, [selectedLanguages, colors, styles]);
 
   return (
     <View style={styles.container}>
@@ -432,48 +391,6 @@ export default function EditProfileScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <View style={styles.labelRow}>
-            <Globe size={14} color={colors.textMuted} />
-            <Text style={styles.label}>{t('spoken_languages', language)}</Text>
-          </View>
-          <Pressable
-            onPress={() => setShowLanguagePicker(true)}
-            style={styles.selectorButton}
-            testID="language-selector"
-          >
-            <Text
-              style={[
-                styles.selectorText,
-                selectedLanguages.length === 0 && styles.selectorPlaceholder,
-              ]}
-              numberOfLines={2}
-            >
-              {selectedLanguageDisplay}
-            </Text>
-            <ChevronRight size={18} color={colors.textMuted} />
-          </Pressable>
-          {selectedLanguages.length > 0 && (
-            <View style={styles.selectedChipsRow}>
-              {selectedLanguages.map(lang => (
-                <View key={lang} style={styles.selectedChip}>
-                  <Text style={styles.selectedChipFlag}>{getLanguageFlag(lang)}</Text>
-                  <Text style={styles.selectedChipText}>{getLanguageName(lang)}</Text>
-                  <Pressable
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      setSelectedLanguages(prev => prev.filter(l => l !== lang));
-                    }}
-                    hitSlop={8}
-                  >
-                    <X size={14} color={colors.textMuted} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.formGroup}>
           <Text style={styles.label}>{t('play_styles', language)}</Text>
           <View style={styles.optionsRow}>
             {PLAY_STYLE_OPTIONS.map(ps => {
@@ -598,40 +515,6 @@ export default function EditProfileScreen() {
           <FlatList
             data={filteredCountries}
             renderItem={renderCountryItem}
-            keyExtractor={item => item}
-            contentContainerStyle={styles.pickerList}
-            showsVerticalScrollIndicator={false}
-          />
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showLanguagePicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowLanguagePicker(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{t('select_languages', language)}</Text>
-            <Pressable onPress={() => { setShowLanguagePicker(false); setLanguageSearch(''); }} style={styles.modalCloseBtn}>
-              <Check size={22} color={colors.gold} />
-            </Pressable>
-          </View>
-          <View style={styles.modalSearchContainer}>
-            <Search size={16} color={colors.textMuted} />
-            <TextInput
-              style={styles.modalSearchInput}
-              placeholder={t('search_placeholder', language)}
-              placeholderTextColor={colors.textMuted}
-              value={languageSearch}
-              onChangeText={setLanguageSearch}
-              autoFocus
-            />
-          </View>
-          <FlatList
-            data={filteredLanguages}
-            renderItem={renderLanguageItem}
             keyExtractor={item => item}
             contentContainerStyle={styles.pickerList}
             showsVerticalScrollIndicator={false}
