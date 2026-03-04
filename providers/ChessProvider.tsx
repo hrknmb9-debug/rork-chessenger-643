@@ -626,9 +626,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             .select('post_id, user_id')
             .in('post_id', postIds);
 
-          const { data: eventsData } = await supabaseNoAuth
+          const { data: eventsData } = await supabase
             .from('events')
-            .select('*');
+            .select('*')
+            .in('post_id', postIds);
 
           const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
           let eventParticipantsData: { event_id: string; user_id: string }[] = [];
@@ -1075,7 +1076,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           .select('post_id, user_id')
           .in('post_id', postIds);
 
-        const { data: eventsData } = await supabaseNoAuth.from('events').select('*');
+        const { data: eventsData } = await supabase
+          .from('events')
+          .select('*')
+          .in('post_id', postIds);
         const eventIds = (eventsData ?? []).map((e: Record<string, unknown>) => e.id as string);
         let epData: { event_id: string; user_id: string }[] = [];
         if (eventIds.length > 0) {
