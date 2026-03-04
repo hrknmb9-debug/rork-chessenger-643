@@ -271,7 +271,10 @@ function MessageBubble({
       if ('text' in result) {
         const decoded = decodeForDisplay(result.text);
         if (decoded.trim()) {
-          const doSet = () => setTranslatedText(decoded);
+          const doSet = () => {
+            setTranslatedText(decoded);
+            if (__DEV__ && Platform.OS === 'ios') console.log('[translate:msg] State updated', item.id, 'len=', decoded.length);
+          };
           if (Platform.OS === 'ios') {
             InteractionManager.runAfterInteractions(doSet);
           } else {
@@ -355,7 +358,7 @@ function MessageBubble({
             <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>📷 画像</Text>
           ) : (
             <>
-              <Text key={`msg-${item.id}-${translatedText ? 't' : 'o'}`} style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
+              <Text key={`msg-${item.id}-${isTranslating ? 'l' : translatedText ? 't' : 'o'}`} style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
                 {displayText}
               </Text>
               {translatedText && displayText.trim() !== (item.text ?? '').trim() && (

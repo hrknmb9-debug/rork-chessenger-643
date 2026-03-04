@@ -265,9 +265,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     const loadLang = async () => {
       try {
         const stored = await AsyncStorage.getItem(LANGUAGE_KEY);
+        // アプリ内設定を常に優先: iOS システムロケールは参照せず、12言語コードとの整合性を厳格にチェック
         if (stored && supportedCodes.has(stored)) {
           setLanguage(stored);
-          console.log('ChessProvider: Loaded language', stored);
+          if (__DEV__) console.log('ChessProvider: Loaded language (app-setting priority)', stored);
         } else if (stored) {
           setLanguage('en');
           await AsyncStorage.setItem(LANGUAGE_KEY, 'en');

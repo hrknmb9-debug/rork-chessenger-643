@@ -90,7 +90,10 @@ function CommentItem({
       if ('text' in result) {
         const decoded = decodeForDisplay(result.text);
         if (decoded.trim()) {
-          const doSet = () => setTranslated(decoded);
+          const doSet = () => {
+            setTranslated(decoded);
+            if (__DEV__ && Platform.OS === 'ios') console.log('[translate:comment] State updated', comment.id, 'len=', decoded.length);
+          };
           if (Platform.OS === 'ios') {
             InteractionManager.runAfterInteractions(doSet);
           } else {
@@ -111,7 +114,7 @@ function CommentItem({
         <SafeImage uri={comment.author.avatar} name={comment.author.name} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceLight }} contentFit="cover" />
         <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: '600' as const, color: colors.textPrimary, marginBottom: 2 }}>{comment.author.name}</Text>
-          <Text key={`comment-${comment.id}-${translated ? 't' : 'o'}`} style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>{displayText ?? ''}</Text>
+          <Text key={`comment-${comment.id}-${translating ? 'l' : translated ? 't' : 'o'}`} style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>{displayText ?? ''}</Text>
           {translated && displayText.trim() !== (commentText ?? '').trim() && (
             <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
           )}
@@ -223,7 +226,10 @@ function PostCard({
       if ('text' in result) {
         const decoded = decodeForDisplay(result.text);
         if (decoded.trim()) {
-          const doSet = () => setTranslatedContent(decoded);
+          const doSet = () => {
+            setTranslatedContent(decoded);
+            if (__DEV__ && Platform.OS === 'ios') console.log('[translate:post] State updated', post.id, 'len=', decoded.length);
+          };
           if (Platform.OS === 'ios') {
             InteractionManager.runAfterInteractions(doSet);
           } else {
@@ -251,17 +257,21 @@ function PostCard({
     const run = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const doSet = (setter: (v: string) => void, val: string) => {
-        if (Platform.OS === 'ios') InteractionManager.runAfterInteractions(() => setter(val));
-        else setter(val);
+      const doSet = (setter: (v: string) => void, val: string, label: string) => {
+        const fn = () => {
+          setter(val);
+          if (__DEV__ && Platform.OS === 'ios') console.log('[translate:event] State updated', label, 'len=', val.length);
+        };
+        if (Platform.OS === 'ios') InteractionManager.runAfterInteractions(fn);
+        else fn();
       };
       if (post.event?.title?.trim()) {
         const r = await translateText(post.event.title, targetLang, token);
-        if (!cancelled && 'text' in r) doSet(setTranslatedEventTitle, decodeForDisplay(r.text));
+        if (!cancelled && 'text' in r) doSet(setTranslatedEventTitle, decodeForDisplay(r.text), 'ev-title');
       }
       if (post.event?.location?.trim()) {
         const r = await translateText(post.event.location, targetLang, token);
-        if (!cancelled && 'text' in r) doSet(setTranslatedEventLocation, decodeForDisplay(r.text));
+        if (!cancelled && 'text' in r) doSet(setTranslatedEventLocation, decodeForDisplay(r.text), 'ev-loc');
       }
     };
     run();
@@ -437,7 +447,7 @@ function PostCard({
       )}
 
       <View style={{ marginBottom: 12 }}>
-        <Text key={`post-${post.id}-${translatedContent ? 't' : 'o'}`} style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22, textAlign: isRTL(language) ? 'right' : 'left' }}>
+        <Text key={`post-${post.id}-${isTranslating ? 'l' : translatedContent ? 't' : 'o'}`} style={{ fontSize: 15, color: colors.textPrimary, lineHeight: 22, textAlign: isRTL(language) ? 'right' : 'left' }}>
           {decodeForDisplay((isTranslating ? contentText : displayContent) ?? '') ?? ''}
         </Text>
         {isShowingTranslated && decodeForDisplay(displayContent ?? '').trim() !== (contentText ?? '').trim() && (

@@ -73,11 +73,12 @@ export function decodeForDisplay(text: string): string {
   return safeDecodeTranslated(text || '');
 }
 
-/** 言語コード正規化 (ISO 639-1) */
+/** 12言語コード正規化 (ISO 639-1) — iOS の en-US, ja-JP 等を無視しアプリ設定を優先 */
+const SUPPORTED_CODES = new Set(['en', 'zh', 'hi', 'es', 'ar', 'fr', 'bn', 'pt', 'ru', 'id', 'ja', 'ko']);
 function normalizeLang(lang: string): string {
   const map: Record<string, string> = {
-    en: 'en', english: 'en',
-    zh: 'zh', chinese: 'zh',
+    en: 'en', 'en-us': 'en', 'en-gb': 'en', english: 'en',
+    zh: 'zh', 'zh-cn': 'zh', 'zh-tw': 'zh', chinese: 'zh',
     hi: 'hi', hindi: 'hi',
     es: 'es', spanish: 'es',
     ar: 'ar', arabic: 'ar',
@@ -86,13 +87,15 @@ function normalizeLang(lang: string): string {
     pt: 'pt', portuguese: 'pt',
     ru: 'ru', russian: 'ru',
     id: 'id', indonesian: 'id',
-    ja: 'ja', japanese: 'ja',
-    ko: 'ko', korean: 'ko',
+    ja: 'ja', 'ja-jp': 'ja', japanese: 'ja',
+    ko: 'ko', 'ko-kr': 'ko', korean: 'ko',
   };
-  return map[lang?.toLowerCase()] ?? (lang?.slice(0, 2) ?? 'en');
+  const lower = lang?.toLowerCase() ?? '';
+  const mapped = map[lower] ?? (lower.slice(0, 2) || 'en');
+  return SUPPORTED_CODES.has(mapped) ? mapped : 'en';
 }
 
-/** 設定言語から翻訳先言語を決定 */
+/** 設定言語から翻訳先言語を決定。アプリ内設定を常に優先、iOS システムロケールは参照しない */
 export function getTargetLanguage(preferredLang?: string): string {
   const lang = preferredLang ?? 'en';
   return normalizeLang(lang);
@@ -208,7 +211,11 @@ function fetchJsonViaXHRText(
         const raw = xhr.responseText ?? xhr.response;
         if (typeof raw === 'string' && raw.trim()) {
           try {
-            resolve(JSON.parse(raw.trim()) as Record<string, unknown>);
+            const text = raw.trim();
+            if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] XHR response received, len=', text.length);
+            const parsed = JSON.parse(text) as Record<string, unknown>;
+            if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] JSON parse OK');
+            resolve(parsed);
           } catch (e) {
             if (TRANSLATE_DEBUG) console.warn('[translate] XHR JSON parse failed:', e);
             resolve(null);
@@ -272,20 +279,27 @@ async function translateViaEdgeFunction(
     const url = `${SUPABASE_URL}/functions/v1/translate`;
     const bodyStr = JSON.stringify({ text, targetLang, sourceLang });
     const headers: Record<string, string> = {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
     };
-    if (TRANSLATE_DEBUG) console.log('[translate] POST', url, 'target:', targetLang, 'len:', text.length);
+    if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Request before send', 'target:', targetLang, 'len:', text.length);
 
     if (Platform.OS !== 'web') {
-      // RN iOS/Android: XHR responseType 'text' で確実に取得
+      // RN iOS/Android: XHR responseType 'text' で確実に取得、res.text()+JSON.parse 二段構え
       let data = await fetchJsonViaXHR(url, { method: 'POST', headers, body: bodyStr });
       if (!data) {
-        // フォールバック: fetch + res.json()（内部処理が異なる場合がある）
+        // フォールバック: fetch + res.text() + JSON.parse（iOS JSON パースエラー対策）
         try {
           const res = await fetch(url, { method: 'POST', headers, body: bodyStr });
-          if (res.ok) data = await res.json();
+          if (res.ok) {
+            const rawText = await res.text();
+            if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Fetch fallback response len=', rawText?.length ?? 0);
+            if (rawText?.trim()) {
+              data = JSON.parse(rawText.trim()) as Record<string, unknown>;
+              if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Fetch fallback JSON parse OK');
+            }
+          }
         } catch (e) {
           if (TRANSLATE_DEBUG) console.warn('[translate] fetch fallback failed:', e);
         }
@@ -306,7 +320,16 @@ async function translateViaEdgeFunction(
 
     try {
       const res = await fetch(url, { method: 'POST', headers, body: bodyStr });
-      const data = await parseJsonFromFetchResponse(res);
+      // Web: res.text() + JSON.parse でバイナリ混入を排除（二段構えバリデーション）
+      const rawText = await res.text();
+      let data: Record<string, unknown> | null = null;
+      if (rawText?.trim()) {
+        try {
+          data = JSON.parse(rawText.trim()) as Record<string, unknown>;
+        } catch (e) {
+          if (TRANSLATE_DEBUG) console.warn('[translate] Web JSON parse failed:', e);
+        }
+      }
       if (!data) {
         if (TRANSLATE_DEBUG) console.warn('[translate] Empty or invalid response');
         return null;
@@ -358,8 +381,9 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
   const encoded = encodeURIComponent(text.slice(0, 500));
   const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langpair}`;
 
+  const myMemoryHeaders = { 'Accept': 'application/json' };
   if (Platform.OS !== 'web') {
-    let data = await fetchJsonViaXHR(url, { method: 'GET' });
+    let data = await fetchJsonViaXHR(url, { method: 'GET', headers: myMemoryHeaders });
     if (!data) {
       try {
         const res = await fetch(url);
@@ -369,7 +393,8 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
       }
     }
     if (!data) return null;
-    const raw = data?.responseData?.translatedText as string | undefined;
+    const resData = data.responseData as { translatedText?: string } | undefined;
+    const raw = resData?.translatedText;
     if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
     return null;
   }
@@ -379,7 +404,8 @@ async function translateViaMyMemory(text: string, targetLang: string, sourceLang
     if (!res.ok) return null;
     const data = await parseJsonFromFetchResponse(res);
     if (!data) return null;
-    const raw = data?.responseData?.translatedText as string | undefined;
+    const resData = data.responseData as { translatedText?: string } | undefined;
+    const raw = resData?.translatedText;
     if (raw && typeof raw === 'string') return { text: safeDecodeTranslated(raw) };
     return null;
   } catch {
@@ -410,7 +436,9 @@ export async function translateText(
   if (cached) return { text: safeDecodeTranslated(cached) };
 
   return withLimit(async () => {
+    if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Invoke Edge Function, target=', normalizedTarget);
     const viaEdge = await translateViaEdgeFunction(text, normalizedTarget, sourceLang, accessToken);
+    if (__DEV__ && Platform.OS === 'ios') console.log('[translate:ios] Edge result', viaEdge ? 'OK' : 'null');
     if (viaEdge && 'text' in viaEdge) {
       const decoded = safeDecodeTranslated(viaEdge.text);
       if (decoded.trim() && decoded.trim() !== text.trim()) {
