@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeImage } from '@/components/SafeImage';
@@ -93,6 +94,86 @@ function mapProfile(profile: SupabaseProfile, userLat?: number, userLon?: number
     lastSeen: profile.last_seen,
   };
 }
+
+function AnimatedHeader({ colors }: { colors: ThemeColors }) {
+  const iconPulse = useRef(new Animated.Value(1)).current;
+  const shimmer = useRef(new Animated.Value(0)).current;
+  const titleSlide = useRef(new Animated.Value(-8)).current;
+  const titleOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // タイトルのフェードイン+スライドイン
+    Animated.parallel([
+      Animated.timing(titleOpacity, { toValue: 1, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.spring(titleSlide, { toValue: 0, speed: 14, bounciness: 6, useNativeDriver: Platform.OS !== 'web' }),
+    ]).start();
+
+    // アイコンのパルスループ
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(iconPulse, { toValue: 1.08, duration: 900, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(iconPulse, { toValue: 1, duration: 900, useNativeDriver: Platform.OS !== 'web' }),
+      ])
+    ).start();
+
+    // シマーループ（0→1→0）
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 1800, useNativeDriver: false }),
+        Animated.timing(shimmer, { toValue: 0, duration: 1800, useNativeDriver: false }),
+      ])
+    ).start();
+  }, []);
+
+  const titleColor = shimmer.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [colors.textPrimary, '#22C55E', colors.textPrimary],
+  });
+
+  return (
+    <View style={headerAnim.row}>
+      {/* アイコン画像 */}
+      <Animated.View style={[headerAnim.iconWrap, { transform: [{ scale: iconPulse }] }]}>
+        <Image
+          source={require('@/assets/images/app-icon.png')}
+          style={headerAnim.iconImg}
+          contentFit="cover"
+        />
+      </Animated.View>
+
+      {/* タイトル */}
+      <Animated.View style={{ opacity: titleOpacity, transform: [{ translateX: titleSlide }] }}>
+        <Animated.Text style={[headerAnim.title, { color: titleColor }]}>
+          Chessenger
+        </Animated.Text>
+        <View style={headerAnim.subtitleRow}>
+          <View style={headerAnim.dot} />
+          <Text style={[headerAnim.subtitle, { color: colors.textMuted }]}>Find your match</Text>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+const headerAnim = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#22C55E', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 8 },
+      android: { elevation: 4 },
+      web: { boxShadow: '0 3px 10px rgba(34,197,94,0.35)' } as any,
+    }),
+  },
+  iconImg: { width: 42, height: 42 },
+  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  subtitle: { fontSize: 11, fontWeight: '500' },
+});
 
 function OnlineStrip({
   players,
@@ -231,8 +312,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeHeader}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerLogo}>{'♟'}</Text>
-            <Text style={styles.headerTitle}>Chessenger</Text>
+            <AnimatedHeader colors={colors} />
           </View>
           <View style={styles.headerRight}>
             <Pressable onPress={() => router.push('/settings' as any)} style={styles.headerIconBtn}>
@@ -320,8 +400,6 @@ function createStyles(colors: ThemeColors) {
     safeHeader: { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? 10 : 30 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 12 },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    headerLogo: { fontSize: 24 },
-    headerTitle: { fontSize: 22, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 },
     headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     headerIconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
     listContent: { paddingBottom: 100 },

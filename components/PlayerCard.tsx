@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import { MapPin, Clock, Zap, Globe } from 'lucide-react-native';
+import { MapPin, Clock, Swords, Globe } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/providers/ThemeProvider';
 import { ThemeColors } from '@/constants/colors';
@@ -126,8 +126,8 @@ function PlayerCardComponent({ player, onPress, language = 'ja' }: PlayerCardPro
             <Text style={styles.footerText}>{player.preferredTimeControl}</Text>
           </View>
           <View style={styles.footerItem}>
-            <Zap size={13} color={colors.textMuted} />
-            <Text style={styles.footerText}>{player.gamesPlayed}{t('games_count', language)}</Text>
+            <Swords size={13} color={colors.textMuted} />
+            <Text style={styles.footerText}>{player.gamesPlayed} {t('tab_matches', language)}</Text>
           </View>
         </View>
       </Pressable>
