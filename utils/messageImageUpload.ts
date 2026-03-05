@@ -7,57 +7,99 @@ const MESSAGE_IMAGES_BUCKET = 'message-images';
 export type MessageImageUploadResult = { url: string } | { error: string };
 
 /**
- * base64 文字列から Blob を生成する（iOS / Android / Web 共通）。
+ * XHR を使ってローカル URI から Blob を取得する（iOS / Android 専用）。
  *
- * 設計方針:
- * - fetch body に Blob を渡すと React Native 0.71+ で安定動作する
- * - ArrayBuffer は一部の iOS/Hermes バージョンでシリアライズ問題が発生するため使わない
- * - Supabase JS クライアントに渡すと Authorization + apikey ヘッダーが自動付加される
+ * 【なぜ base64ToBlob でなく XHR Blob なのか】
+ * base64ToBlob は `atob()` + `Uint8Array` ループが同期処理のため、
+ * 2MB 以上の画像で JS スレッドを数秒間ブロックし UI が完全フリーズする。
+ * XHR の responseType='blob' を使うと React Native がネイティブスタックで
+ * ファイルを読み込み、JS スレッドをブロックしない。
+ *
+ * 対応 URI: file:// (expo-image-picker の allowsEditing 後の URI)
  */
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes.buffer], { type: mimeType });
+function readFileAsBlob(fileUri: string, mimeType: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'blob';
+    xhr.onload = () => {
+      if (xhr.status === 200 && xhr.response) {
+        resolve(xhr.response as Blob);
+      } else {
+        console.warn(LOG_TAG, 'XHR load failed, status=', xhr.status);
+        resolve(null);
+      }
+    };
+    xhr.onerror = () => {
+      console.warn(LOG_TAG, 'XHR network error for uri=', fileUri?.slice(0, 50));
+      resolve(null);
+    };
+    xhr.open('GET', fileUri);
+    // Content-Type ヒントを付与（一部環境で Blob の type が空になるのを防ぐ）
+    xhr.setRequestHeader('Accept', mimeType);
+    xhr.send();
+  });
 }
 
 /**
- * ローカル URI から base64 文字列を取得する（iOS/Android 専用）。
- *
- * 優先順位:
- * 1. ピッカーが返した base64（最速・ファイル読み込み不要）
- * 2. expo-file-system で file:// を読む（ピッカーが base64 を返さない場合のフォールバック）
- * 3. expo-image-manipulator で ph:// / assets-library:// を file:// に変換してから読む
+ * ph:// / assets-library:// URI を file:// に変換する（iOS 写真ライブラリ URI 対策）。
+ * expo-image-picker が allowsEditing:true の場合は通常 file:// が返るが、
+ * 編集なし選択時は ph:// が返る場合があるため念のため変換する。
  */
-async function getNativeBase64(localUri: string, base64FromPicker?: string): Promise<string | null> {
-  // 1. ピッカー提供 base64（最優先）
-  if (base64FromPicker?.length) return base64FromPicker;
-
-  const FileSystem = await import('expo-file-system');
-
-  // 2. file:// を直接読む
-  if (localUri.startsWith('file://')) {
-    const b64 = await FileSystem.readAsStringAsync(localUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    }).catch((e) => {
-      console.warn(LOG_TAG, 'FileSystem.readAsStringAsync failed:', e);
-      return null;
-    });
-    if (b64) return b64;
-  }
-
-  // 3. ph:// / assets-library:// → ImageManipulator で file:// に変換してから読む
+async function normalizeToCachePath(localUri: string): Promise<string> {
+  if (localUri.startsWith('file://')) return localUri;
   try {
     const IM = await import('expo-image-manipulator');
     const fmt = IM.SaveFormat?.JPEG ?? ('jpeg' as unknown as import('expo-image-manipulator').SaveFormat);
     const converted = await IM.manipulateAsync(localUri, [], { compress: 0.85, format: fmt });
-    return await FileSystem.readAsStringAsync(converted.uri, {
+    return converted.uri;
+  } catch (e) {
+    console.warn(LOG_TAG, 'normalizeToCachePath failed:', e);
+    return localUri;
+  }
+}
+
+/**
+ * iOS / Android 専用: ローカル URI → Blob 取得（XHR 優先、base64 fallback）
+ */
+async function getNativeBlob(localUri: string, mimeType: string, base64FromPicker?: string): Promise<Blob | null> {
+  // URI を file:// に正規化
+  const fileUri = await normalizeToCachePath(localUri);
+
+  // XHR 経由（非同期・ノンブロッキング）
+  const blob = await readFileAsBlob(fileUri, mimeType);
+  if (blob && blob.size > 0) return blob;
+
+  // フォールバック: base64FromPicker から Blob を生成
+  // （XHR が失敗した場合のみ。大きな画像はここを通らないよう XHR を優先する）
+  const b64 = base64FromPicker;
+  if (b64?.length) {
+    try {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes.buffer], { type: mimeType });
+    } catch (e) {
+      console.warn(LOG_TAG, 'base64 fallback failed:', e);
+    }
+  }
+
+  // 最終フォールバック: FileSystem.readAsStringAsync → base64 → Blob
+  try {
+    const FileSystem = await import('expo-file-system');
+    const b64fs = await FileSystem.readAsStringAsync(fileUri, {
       encoding: FileSystem.EncodingType.Base64,
     }).catch(() => null);
+    if (b64fs?.length) {
+      const binary = atob(b64fs);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes.buffer], { type: mimeType });
+    }
   } catch (e) {
-    console.warn(LOG_TAG, 'ImageManipulator fallback failed:', e);
-    return null;
+    console.warn(LOG_TAG, 'FileSystem fallback failed:', e);
   }
+
+  return null;
 }
 
 /**
@@ -91,7 +133,7 @@ async function uploadBlobToStorage(blob: Blob, filePath: string, contentType: st
 
 /**
  * チャット用画像アップロード。
- * base64 → Blob → Supabase JS クライアントの一本道で iOS / Web 両対応。
+ * iOS: XHR Blob（ノンブロッキング） / Web: fetch Blob → Supabase JS クライアント
  */
 export async function uploadMessageImage(
   localUri: string,
@@ -109,13 +151,10 @@ export async function uploadMessageImage(
     let blob: Blob | null = null;
 
     if (Platform.OS === 'web') {
-      // Web: blob: URI を fetch で読んで Blob を取得
       const res = await fetch(localUri).catch(() => null);
       if (res?.ok) blob = await res.blob().catch(() => null);
     } else {
-      // iOS / Android: base64 → Blob（FileSystem 経由フォールバック含む）
-      const base64 = await getNativeBase64(localUri, base64FromPicker);
-      if (base64?.length) blob = base64ToBlob(base64, contentType);
+      blob = await getNativeBlob(localUri, contentType, base64FromPicker);
     }
 
     if (!blob || blob.size === 0) {
@@ -132,12 +171,13 @@ export async function uploadMessageImage(
 
 /**
  * タイムライン投稿用画像アップロード。
- * base64 → Blob → Supabase JS クライアントの一本道で iOS / Web 両対応。
+ * iOS: XHR Blob（ノンブロッキング） / Web: fetch Blob → Supabase JS クライアント
  *
  * 【iOS での問題履歴と解決策】
- * - Supabase JS .upload() + ArrayBuffer: iOS ブリッジでシリアライズ不安定 → 廃止
- * - FileSystem.uploadAsync: apikey ヘッダー欠落で 401、また auth 処理が手動で煩雑 → 廃止
- * - 現在: base64 → Blob → Supabase JS .upload() が最もシンプルかつ確実
+ * - ArrayBuffer: iOS Hermes ブリッジ越しのシリアライズ不安定 → 廃止
+ * - FileSystem.uploadAsync: apikey ヘッダー欠落で 401 → 廃止
+ * - base64ToBlob: atob()+ループが同期処理のため大きな画像でUI完全フリーズ → 廃止
+ * - 現在: XHR responseType='blob' がネイティブスタックで非同期読み込み → 最も安定
  */
 export async function uploadTimelineImage(
   localUri: string,
@@ -154,13 +194,10 @@ export async function uploadTimelineImage(
     let blob: Blob | null = null;
 
     if (Platform.OS === 'web') {
-      // Web: blob: URI を fetch で読んで Blob を取得
       const res = await fetch(localUri).catch(() => null);
       if (res?.ok) blob = await res.blob().catch(() => null);
     } else {
-      // iOS / Android: base64 → Blob（FileSystem 経由フォールバック含む）
-      const base64 = await getNativeBase64(localUri, base64FromPicker);
-      if (base64?.length) blob = base64ToBlob(base64, contentType);
+      blob = await getNativeBlob(localUri, contentType, base64FromPicker);
     }
 
     if (!blob || blob.size === 0) {

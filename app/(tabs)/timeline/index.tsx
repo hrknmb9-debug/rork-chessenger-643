@@ -766,6 +766,7 @@ export default function TimelineScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [postImageUrl, setPostImageUrl] = useState<string | null>(null);
   const [postImageBase64, setPostImageBase64] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState<boolean>(false);
   const [showEventModal, setShowEventModal] = useState<boolean>(false);
   const [eventTitle, setEventTitle] = useState<string>('');
   const [eventDate, setEventDate] = useState<Date>(new Date());
@@ -845,43 +846,49 @@ export default function TimelineScreen() {
     const hasText = newPostText.trim().length > 0;
     const hasImage = !!postImageUrl;
     if (!hasText && !hasImage) return;
+    if (isPosting) return;
 
+    setIsPosting(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     let imageUrl: string | undefined = postImageUrl ?? undefined;
 
-    if (imageUrl && !imageUrl.startsWith('http')) {
-      // getSession() はローカルキャッシュから取得するため getUser() より確実
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (user) {
-        const result = await uploadTimelineImage(
-          imageUrl,
-          user.id,
-          postImageBase64 ?? undefined
-        );
-        if ('url' in result) {
-          imageUrl = result.url;
+    try {
+      if (imageUrl && !imageUrl.startsWith('http')) {
+        // getSession() はローカルキャッシュから取得するため getUser() より確実
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (user) {
+          const result = await uploadTimelineImage(
+            imageUrl,
+            user.id,
+            postImageBase64 ?? undefined
+          );
+          if ('url' in result) {
+            imageUrl = result.url;
+          } else {
+            Alert.alert(language === 'ja' ? '画像エラー' : 'Image Error', result.error);
+            imageUrl = undefined;
+            if (!hasText) return;
+          }
         } else {
-          Alert.alert(language === 'ja' ? '画像エラー' : 'Image Error', result.error);
+          Alert.alert(
+            language === 'ja' ? '認証エラー' : 'Auth Error',
+            language === 'ja' ? '再ログインしてください' : 'Please log in again'
+          );
           imageUrl = undefined;
           if (!hasText) return;
         }
-      } else {
-        Alert.alert(
-          language === 'ja' ? '認証エラー' : 'Auth Error',
-          language === 'ja' ? '再ログインしてください' : 'Please log in again'
-        );
-        imageUrl = undefined;
-        if (!hasText) return;
       }
-    }
 
-    addTimelinePost(newPostText.trim(), 'general', imageUrl);
-    setNewPostText('');
-    setPostImageUrl(null);
-    setPostImageBase64(null);
-    setShowComposer(false);
-  }, [newPostText, addTimelinePost, postImageUrl, postImageBase64, language]);
+      addTimelinePost(newPostText.trim(), 'general', imageUrl);
+      setNewPostText('');
+      setPostImageUrl(null);
+      setPostImageBase64(null);
+      setShowComposer(false);
+    } finally {
+      setIsPosting(false);
+    }
+  }, [newPostText, addTimelinePost, postImageUrl, postImageBase64, language, isPosting]);
 
   const handlePickImage = useCallback(async () => {
     try {
@@ -1193,16 +1200,18 @@ export default function TimelineScreen() {
             </Pressable>
             <Pressable
               onPress={handleNewPost}
-              style={[styles.composerPostBtn, (!newPostText.trim() && !postImageUrl) && styles.composerPostBtnDisabled]}
-              disabled={!newPostText.trim() && !postImageUrl}
+              style={[styles.composerPostBtn, ((!newPostText.trim() && !postImageUrl) || isPosting) && styles.composerPostBtnDisabled]}
+              disabled={(!newPostText.trim() && !postImageUrl) || isPosting}
             >
-              <Text style={styles.composerPostText}>{t('post', language)}</Text>
+              {isPosting
+                ? <ActivityIndicator size="small" color={colors.white} />
+                : <Text style={styles.composerPostText}>{t('post', language)}</Text>}
             </Pressable>
           </View>
         </View>
       )}
     </View>
-  ), [showComposer, newPostText, language, handleNewPost, colors, styles, activeUsersCount, postImageUrl, handlePickImage, handleTemplateSelect, filter]);
+  ), [showComposer, newPostText, language, handleNewPost, colors, styles, activeUsersCount, postImageUrl, handlePickImage, handleTemplateSelect, filter, isPosting]);
 
   return (
     <KeyboardAvoidingView
