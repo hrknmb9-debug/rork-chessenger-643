@@ -182,7 +182,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         // （ログイン成功後に navigate で pop-to-root できるように）
         if (initialLoadDone.current) {
           try {
-            router.push('/login' as any);
+            router.replace('/login' as any);
           } catch (navErr) {
             console.log('Auth: Navigation to login failed', navErr);
           }

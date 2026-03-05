@@ -1446,15 +1446,21 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       await supabase.from('matches').update({ status: newStatus }).eq('id', matchId);
       console.log('Match response synced to Supabase');
 
-      if (match?.opponent) {
-        const { data: { user } } = await supabase.auth.getUser();
-        const requesterId = match.isIncoming ? match.opponent.id : (user?.id ?? 'me');
-
-        notifyMatchResponse(
-          requesterId !== (user?.id ?? 'me') ? requesterId : match.opponent.id,
-          profile.name,
-          accept
-        ).catch(e => console.log('Push notification failed (non-blocking)', e));
+      // 常に相手（match.opponent.id）に通知を送る
+      const opponentId = match?.opponent?.id;
+      if (opponentId) {
+        // DB通知
+        supabase.from('notifications').insert({
+          user_id: opponentId,
+          type: accept ? 'match_accepted' : 'match_declined',
+          content: accept
+            ? `${profile.name}が対局リクエストを承諾しました`
+            : `${profile.name}が対局リクエストを辞退しました`,
+          related_id: matchId,
+        }).catch(() => {});
+        // プッシュ通知
+        notifyMatchResponse(opponentId, profile.name, accept)
+          .catch(e => console.log('Push notification failed (non-blocking)', e));
       }
     } catch (e) {
       console.log('Match response Supabase sync failed', e);

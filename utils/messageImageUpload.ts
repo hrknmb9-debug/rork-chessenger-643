@@ -160,15 +160,26 @@ export async function uploadTimelineImage(
   userId: string,
   base64FromPicker?: string
 ): Promise<MessageImageUploadResult> {
+  console.log(LOG_TAG, '[Timeline] upload start, uri=', localUri?.slice(0, 40), 'hasBase64=', !!base64FromPicker);
+
   const arrayBuffer = await (async (): Promise<ArrayBuffer | null> => {
-    if (base64FromPicker?.length) return base64ToArrayBuffer(base64FromPicker);
+    if (base64FromPicker?.length) {
+      const buf = base64ToArrayBuffer(base64FromPicker);
+      console.log(LOG_TAG, '[Timeline] base64 decoded, byteLength=', buf.byteLength);
+      return buf;
+    }
     if (Platform.OS === 'web') {
       const res = await fetch(localUri);
       return res.ok ? res.arrayBuffer() : null;
     }
+    console.log(LOG_TAG, '[Timeline] no base64, trying manipulator fallback');
     return readImageViaManipulator(localUri);
   })();
-  if (!arrayBuffer) return { error: '画像の読み込みに失敗しました' };
+
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    console.warn(LOG_TAG, '[Timeline] no image data: arrayBuffer=', !!arrayBuffer, 'byteLength=', arrayBuffer?.byteLength);
+    return { error: '画像データの取得に失敗しました。別の画像をお試しください。' };
+  }
 
   const fileExt = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
   const filePath = `${userId}/timeline/${Date.now()}.${fileExt}`;
