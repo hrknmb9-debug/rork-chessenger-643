@@ -113,13 +113,15 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
 export async function savePushTokenToSupabase(token: string): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    // getSession() はローカルキャッシュから取得するため getUser() より確実
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) {
       console.log('Notifications: No user, skipping token save');
       return;
     }
 
-    const { error } = await supabaseNoAuth
+    const { error } = await supabase
       .from('profiles')
       .update({ expo_push_token: token })
       .eq('id', user.id);
