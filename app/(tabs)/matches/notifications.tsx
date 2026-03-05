@@ -3,21 +3,27 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   RefreshControl,
-  Pressable,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { MatchCard } from '@/components/MatchCard';
 import { t } from '@/utils/translations';
-import { BackNavButton } from '@/components/BackNavButton';
+import { Match } from '@/types';
+
+function getRoomId(a: string, b: string): string {
+  return [a, b].sort().join('_');
+}
 
 export default function MatchNotificationsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { pendingIncoming, respondToMatch, language } = useChess();
+  const { user } = useAuth();
+  const { pendingIncoming, activeMatches, respondToMatch, language } = useChess();
   const router = useRouter();
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -26,33 +32,44 @@ export default function MatchNotificationsScreen() {
     setTimeout(() => setRefreshing(false), 800);
   }, []);
 
-  const handleAccept = useCallback((matchId: string) => {
-    respondToMatch(matchId, true);
-  }, [respondToMatch]);
+  const handleMessage = useCallback(
+    (match: Match) => {
+      if (!user?.id) return;
+      const roomId = getRoomId(user.id, match.opponent.id);
+      router.push(`/messages/${roomId}` as any);
+    },
+    [user?.id, router]
+  );
+
+  const handleAccept = useCallback(
+    (matchId: string, match: Match) => {
+      respondToMatch(matchId, true);
+      Alert.alert(
+        t('message_send_prompt', language),
+        '',
+        [
+          { text: t('cancel', language), style: 'cancel' },
+          {
+            text: t('message_send_action', language),
+            onPress: () => handleMessage(match),
+          },
+        ]
+      );
+    },
+    [respondToMatch, handleMessage, language]
+  );
 
   const handleDecline = useCallback((matchId: string) => {
     respondToMatch(matchId, false);
   }, [respondToMatch]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: (typeof pendingIncoming)[0] }) => (
-      <View style={styles.cardWrap}>
-        <MatchCard
-          match={item}
-          onAccept={handleAccept}
-          onDecline={handleDecline}
-          language={language}
-        />
-      </View>
-    ),
-    [handleAccept, handleDecline, language, styles.cardWrap]
-  );
-
-  const keyExtractor = useCallback((item: (typeof pendingIncoming)[0]) => item.id, []);
+  const hasIncoming = pendingIncoming.length > 0;
+  const hasAccepted = activeMatches.length > 0;
+  const isEmpty = !hasIncoming && !hasAccepted;
 
   return (
     <View style={styles.container}>
-      {pendingIncoming.length === 0 ? (
+      {isEmpty ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>♔</Text>
           <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
@@ -63,10 +80,7 @@ export default function MatchNotificationsScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={pendingIncoming}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
+        <ScrollView
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -77,7 +91,41 @@ export default function MatchNotificationsScreen() {
               colors={[colors.accent]}
             />
           }
-        />
+        >
+          {hasIncoming && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+                {t('incoming_requests', language)}
+              </Text>
+              {pendingIncoming.map((item) => (
+                <View key={item.id} style={styles.cardWrap}>
+                  <MatchCard
+                    match={item}
+                    onAccept={(id) => handleAccept(id, item)}
+                    onDecline={handleDecline}
+                    language={language}
+                  />
+                </View>
+              ))}
+            </>
+          )}
+          {hasAccepted && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+                {t('confirmed_matches', language)}
+              </Text>
+              {activeMatches.map((item) => (
+                <View key={item.id} style={styles.cardWrap}>
+                  <MatchCard
+                    match={item}
+                    onMessagePress={handleMessage}
+                    language={language}
+                  />
+                </View>
+              ))}
+            </>
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -93,6 +141,14 @@ function createStyles(colors: { cardBorder: string; background: string; textPrim
       paddingHorizontal: 16,
       paddingTop: 12,
       paddingBottom: 24,
+    },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginBottom: 10,
+      marginTop: 4,
     },
     cardWrap: {
       marginBottom: 16,

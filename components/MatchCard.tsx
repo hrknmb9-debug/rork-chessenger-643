@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Platform } from 'react-native';
 import { SafeImage } from '@/components/SafeImage';
-import { MapPin, Clock, Check, X, Trophy, Minus } from 'lucide-react-native';
+import { MapPin, Clock, Check, X, Trophy, Minus, MessageCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/providers/ThemeProvider';
 import { ThemeColors } from '@/constants/colors';
@@ -13,11 +13,12 @@ interface MatchCardProps {
   match: Match;
   onAccept?: (matchId: string) => void;
   onDecline?: (matchId: string) => void;
+  onMessagePress?: (match: Match) => void;
   onPress?: (match: Match) => void;
   language?: Language;
 }
 
-function MatchCardComponent({ match, onAccept, onDecline, onPress, language = 'ja' }: MatchCardProps) {
+function MatchCardComponent({ match, onAccept, onDecline, onMessagePress, onPress, language = 'ja' }: MatchCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -172,6 +173,17 @@ function MatchCardComponent({ match, onAccept, onDecline, onPress, language = 'j
             </Pressable>
           </View>
         )}
+
+        {match.status === 'accepted' && onMessagePress && (
+          <Pressable
+            onPress={() => onMessagePress(match)}
+            style={[styles.actionBtn, styles.messageBtn]}
+            testID={`message-${match.id}`}
+          >
+            <MessageCircle size={18} color={colors.white} />
+            <Text style={styles.messageBtnText}>{t('message_send_action', language)}</Text>
+          </Pressable>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -283,6 +295,15 @@ function createStyles(colors: ThemeColors) {
     },
     acceptBtn: {
       backgroundColor: colors.gold,
+    },
+    messageBtn: {
+      backgroundColor: colors.blue,
+      marginTop: 8,
+    },
+    messageBtnText: {
+      fontSize: 14,
+      fontWeight: '600' as const,
+      color: colors.white,
     },
     declineText: {
       fontSize: 14,

@@ -22,7 +22,7 @@ export default function MatchesLayout() {
       <Stack.Screen
         name="notifications"
         options={{
-          title: t('incoming_requests', language),
+          title: t('matches', language),
           headerLeft: () => <BackNavButton onPress={() => router.back()} />,
         }}
       />
