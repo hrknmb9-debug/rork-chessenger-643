@@ -80,6 +80,7 @@ export function SafeImage({ uri, name, style, contentFit = 'cover' }: SafeImageP
         contentFit={contentFit}
         onError={handleError}
         cachePolicy="memory-disk"
+        cacheKey={typeof src === 'string' ? src : undefined}
       />
     </ImageErrorBoundary>
   );

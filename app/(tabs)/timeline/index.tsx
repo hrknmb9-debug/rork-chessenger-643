@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect, memo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import {
   ActivityIndicator,
   InteractionManager,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { SafeImage } from '@/components/SafeImage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -56,6 +55,25 @@ const TEMPLATES = [
   { key: 'cafe', labelKey: 'template_cafe' },
   { key: 'online', labelKey: 'template_online' },
 ];
+
+/** チカチカ防止: uri/name が同一なら再レンダーをスキップ（翻訳 state 変更時の親再レンダーで画像が瞬灭するのを防ぐ） */
+const MemoizedAvatar = memo(function MemoizedAvatar({
+  uri,
+  name,
+  size,
+  backgroundColor,
+}: {
+  uri: string | null | undefined;
+  name: string;
+  size: number;
+  backgroundColor?: string;
+}) {
+  const avatarStyle = useMemo(
+    () => ({ width: size, height: size, borderRadius: size / 2, backgroundColor: backgroundColor ?? 'transparent' }),
+    [size, backgroundColor]
+  );
+  return <SafeImage uri={uri} name={name} style={avatarStyle} contentFit="cover" />;
+});
 
 function CommentItem({
   comment,
@@ -140,7 +158,7 @@ function CommentItem({
   return (
     <View>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <SafeImage uri={comment.author.avatar} name={comment.author.name} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceLight }} contentFit="cover" />
+        <MemoizedAvatar uri={comment.author.avatar} name={comment.author.name} size={28} backgroundColor={colors.surfaceLight} />
         <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: '600' as const, color: colors.textPrimary, marginBottom: 2 }}>{comment.author.name}</Text>
           <View key={translationState.renderKey ?? `comment-${comment.id}`}>
@@ -167,7 +185,7 @@ function CommentItem({
           {comment.replies.map(reply => (
             <View key={reply.id} style={{ flexDirection: 'row', gap: 6 }}>
               <CornerDownRight size={12} color={colors.textMuted} style={{ marginTop: 8 }} />
-              <SafeImage uri={reply.author.avatar} name={reply.author.name} style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceLight }} contentFit="cover" />
+              <MemoizedAvatar uri={reply.author.avatar} name={reply.author.name} size={22} backgroundColor={colors.surfaceLight} />
               <View style={{ flex: 1, backgroundColor: colors.surfaceLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                 <Text style={{ fontSize: 11, fontWeight: '600' as const, color: colors.textPrimary }}>{reply.author.name}</Text>
                 <Text style={{ fontSize: 12, color: colors.textSecondary }}>{reply.content}</Text>
@@ -400,7 +418,7 @@ function PostCard({
     <View style={{ marginHorizontal: 16, marginBottom: 18, backgroundColor: colors.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: colors.cardBorder, overflow: 'hidden' }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <Pressable onPress={() => onAuthorPress(post.author.id)} style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <SafeImage uri={post.author.avatar} name={post.author.name} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceLight }} contentFit="cover" />
+          <MemoizedAvatar uri={post.author.avatar} name={post.author.name} size={42} backgroundColor={colors.surfaceLight} />
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text style={{ fontSize: 15, fontWeight: '600' as const, color: colors.textPrimary }}>{post.author.name}</Text>
             <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{getTimeAgo(post.createdAt, language)}</Text>
@@ -604,6 +622,9 @@ function PostCard({
     </View>
   );
 }
+
+/** チカチカ防止: 親の不要な再レンダーで画像が瞬灭しないようメモ化 */
+const MemoizedPostCard = memo(PostCard);
 
 export default function TimelineScreen() {
   const { colors } = useTheme();
@@ -835,7 +856,7 @@ export default function TimelineScreen() {
 
   const renderPost = useCallback(
     ({ item }: { item: TimelinePost }) => (
-      <PostCard
+      <MemoizedPostCard
         post={item}
         onLike={toggleLike}
         onComment={handleComment}
@@ -963,6 +984,9 @@ export default function TimelineScreen() {
         ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={8}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} colors={[colors.gold]} />
         }
