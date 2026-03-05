@@ -75,6 +75,31 @@ const MemoizedAvatar = memo(function MemoizedAvatar({
   return <SafeImage uri={uri} name={name} style={avatarStyle} contentFit="cover" />;
 });
 
+/** チカチカ防止: 投稿画像も翻訳 state と非連動にする（uri 同一なら再レンダースキップ） */
+const MemoizedPostImage = memo(function MemoizedPostImage({
+  uri,
+  name,
+  backgroundColor,
+  onImagePress,
+}: {
+  uri: string;
+  name: string;
+  backgroundColor: string;
+  onImagePress?: (url: string) => void;
+}) {
+  const imageStyle = useMemo(
+    () => ({ width: '100%' as const, height: 200, borderRadius: 12, backgroundColor }),
+    [backgroundColor]
+  );
+  const handlePress = useCallback(() => onImagePress?.(uri), [onImagePress, uri]);
+  const content = <SafeImage uri={uri} name={name} style={imageStyle} contentFit="cover" />;
+  return onImagePress ? (
+    <Pressable onPress={handlePress} style={{ marginBottom: 12 }}>{content}</Pressable>
+  ) : (
+    <View style={{ marginBottom: 12 }}>{content}</View>
+  );
+});
+
 function CommentItem({
   comment,
   onReply,
@@ -223,8 +248,7 @@ function PostCard({
   const [commentText, setCommentText] = useState<string>('');
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [contentTranslationState, setContentTranslationState] = useState<{ localTranslatedContent: string | null; loading: boolean; renderKey?: number; displayReady: boolean }>({ localTranslatedContent: null, loading: false, displayReady: true });
-  const [translatedEventTitle, setTranslatedEventTitle] = useState<string | null>(null);
-  const [translatedEventLocation, setTranslatedEventLocation] = useState<string | null>(null);
+  const [translatedEvent, setTranslatedEvent] = useState<{ title: string | null; location: string | null }>({ title: null, location: null });
   const heartScale = useRef(new Animated.Value(1)).current;
   const userId = currentUserId ?? 'me';
   const isLiked = post.likes.includes(userId);
@@ -321,36 +345,38 @@ function PostCard({
   const targetLang = getTargetLanguage(language);
   useEffect(() => {
     if (!post.event) {
-      setTranslatedEventTitle(null);
-      setTranslatedEventLocation(null);
+      setTranslatedEvent({ title: null, location: null });
       return;
     }
-    setTranslatedEventTitle(null);
-    setTranslatedEventLocation(null);
+    setTranslatedEvent({ title: null, location: null });
     let cancelled = false;
     const run = async () => {
+      // チカチカ防止: 初回ペイント完了後に翻訳開始（連続 setState による画像再描画を軽減）
+      await new Promise(r => setTimeout(r, 50));
+      if (cancelled) return;
       const token = accessToken ?? undefined;
-      const doSet = (setter: (v: string) => void, val: string, label: string) => {
-        if (__DEV__ && Platform.OS === 'ios' && !val?.trim()) console.error('[translate:ios] ERROR: Result is empty or undefined');
-        const fn = () => setter(val);
-        if (Platform.OS === 'ios') InteractionManager.runAfterInteractions(() => setTimeout(fn, 0));
-        else fn();
-      };
+      let newTitle: string | null = null;
+      let newLocation: string | null = null;
       if (post.event?.title?.trim()) {
         const r = await translateText(post.event.title, targetLang, token);
-        if (!cancelled && 'text' in r) doSet(setTranslatedEventTitle, decodeForDisplay(r.text), 'ev-title');
+        if (!cancelled && 'text' in r) newTitle = decodeForDisplay(r.text);
       }
       if (post.event?.location?.trim()) {
         const r = await translateText(post.event.location, targetLang, token);
-        if (!cancelled && 'text' in r) doSet(setTranslatedEventLocation, decodeForDisplay(r.text), 'ev-loc');
+        if (!cancelled && 'text' in r) newLocation = decodeForDisplay(r.text);
       }
+      if (cancelled) return;
+      // 1回の setState にまとめて再レンダーを削減（画像チカチカ回避）
+      const apply = () => setTranslatedEvent({ title: newTitle, location: newLocation });
+      if (Platform.OS === 'ios') InteractionManager.runAfterInteractions(() => setTimeout(apply, 0));
+      else apply();
     };
     run();
     return () => { cancelled = true; };
   }, [post.event?.id, post.event?.title, post.event?.location, targetLang, accessToken]);
 
-  const displayEventTitle = translatedEventTitle ?? post.event?.title ?? '';
-  const displayEventLocation = translatedEventLocation ?? post.event?.location ?? '';
+  const displayEventTitle = translatedEvent.title ?? post.event?.title ?? '';
+  const displayEventLocation = translatedEvent.location ?? post.event?.location ?? '';
 
   const getTypeIcon = () => {
     switch (post.type) {
@@ -455,7 +481,7 @@ function PostCard({
       {/* イベント投稿の場合: イベントカードをコンテンツより先に表示（詳細を強調） */}
       {post.event && (
         <View style={{ backgroundColor: colors.greenMuted, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.green + '33', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
-          <Text key={`ev-title-${post.id}-${translatedEventTitle ? 't' : 'o'}`} style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8, textAlign: isRTL(language) ? 'right' : 'left' }}>{displayEventTitle}</Text>
+          <Text key={`ev-title-${post.id}`} style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8, textAlign: isRTL(language) ? 'right' : 'left' }}>{displayEventTitle}</Text>
           <View style={{ gap: 4, marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Calendar size={13} color={colors.green} />
@@ -464,7 +490,7 @@ function PostCard({
             {displayEventLocation ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <MapPin size={13} color={colors.green} />
-                <Text key={`ev-loc-${post.id}-${translatedEventLocation ? 't' : 'o'}`} style={{ fontSize: 13, color: colors.textSecondary }}>{displayEventLocation}</Text>
+                <Text key={`ev-loc-${post.id}`} style={{ fontSize: 13, color: colors.textSecondary }}>{displayEventLocation}</Text>
               </View>
             ) : null}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -543,9 +569,12 @@ function PostCard({
       </View>
 
       {post.imageUrl && (
-        <Pressable onPress={() => onImagePress?.(post.imageUrl!)} style={{ marginBottom: 12 }}>
-          <SafeImage uri={post.imageUrl} name={post.author.name} style={{ width: '100%', height: 200, borderRadius: 12, backgroundColor: colors.surfaceLight }} contentFit="cover" />
-        </Pressable>
+        <MemoizedPostImage
+          uri={post.imageUrl}
+          name={post.author.name}
+          backgroundColor={colors.surfaceLight}
+          onImagePress={onImagePress}
+        />
       )}
 
       {post.matchResult && (
