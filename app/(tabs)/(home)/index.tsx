@@ -35,6 +35,7 @@ import { supabase } from '@/utils/supabaseClient';
 import { resolveAvatarUrl } from '@/utils/avatarUrl';
 
 type TabKey = 'all' | 'nearby' | 'online';
+type NearbyFilter = 'all' | '0.5' | '1' | '1.5';
 
 interface SupabaseProfile {
   id: string;
@@ -241,11 +242,12 @@ const strip = StyleSheet.create({
 export default function HomeScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { language, currentUserId } = useChess();
+  const { language, currentUserId, blockedUsers } = useChess();
   const { userLocation, isLoading: locationLoading, toggleLocationEnabled } = useLocation();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [nearbyFilter, setNearbyFilter] = useState<NearbyFilter>('all');
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -280,23 +282,33 @@ export default function HomeScreen() {
   }, [fetchPlayers]);
 
   const filteredPlayers = useMemo(() => {
-    let result = [...players];
+    // ブロック済みユーザーを除外
+    let result = players.filter(p => !blockedUsers.includes(p.id));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(p => p.name.toLowerCase().includes(q) || p.location.toLowerCase().includes(q));
     }
     if (activeTab === 'nearby' && userLocation) {
-      result = result.filter(p => p.distance <= 10);
+      // nearbyFilter に応じた距離上限（km）
+      const maxKm = nearbyFilter === '0.5' ? 0.5 : nearbyFilter === '1' ? 1 : nearbyFilter === '1.5' ? 1.5 : 10;
+      result = result.filter(p => p.distance <= maxKm);
     } else if (activeTab === 'online') {
       result = result.filter(p => p.isOnline);
     }
     return result.sort((a, b) => (a.isOnline === b.isOnline ? a.distance - b.distance : a.isOnline ? -1 : 1));
-  }, [players, searchQuery, activeTab, userLocation]);
+  }, [players, searchQuery, activeTab, nearbyFilter, userLocation, blockedUsers]);
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'all', label: t('all', language) },
     { key: 'nearby', label: t('nearby', language) },
     { key: 'online', label: t('online', language) },
+  ];
+
+  const NEARBY_FILTERS: { key: NearbyFilter; label: string }[] = [
+    { key: 'all', label: language === 'ja' ? '全て' : 'All' },
+    { key: '0.5', label: '0-500m' },
+    { key: '1', label: '0-1km' },
+    { key: '1.5', label: '0-1.5km' },
   ];
 
   if (loading) {
@@ -354,7 +366,7 @@ export default function HomeScreen() {
 
             <View style={styles.onlineSection}>
               <OnlineStrip
-                players={players}
+                players={players.filter(p => !blockedUsers.includes(p.id))}
                 onPress={p => router.push(('/player/' + p.id) as any)}
                 colors={colors}
                 language={language}
@@ -376,7 +388,10 @@ export default function HomeScreen() {
               {TABS.map(tab => (
                 <Pressable
                   key={tab.key}
-                  onPress={() => setActiveTab(tab.key)}
+                  onPress={() => {
+                    setActiveTab(tab.key);
+                    if (tab.key !== 'nearby') setNearbyFilter('all');
+                  }}
                   style={[styles.tab, activeTab === tab.key ? styles.tabActive : null]}
                 >
                   <Text style={[styles.tabText, activeTab === tab.key ? styles.tabTextActive : null]}>
@@ -385,6 +400,22 @@ export default function HomeScreen() {
                 </Pressable>
               ))}
             </View>
+
+            {activeTab === 'nearby' && (
+              <View style={styles.nearbyFilters}>
+                {NEARBY_FILTERS.map(f => (
+                  <Pressable
+                    key={f.key}
+                    onPress={() => setNearbyFilter(f.key)}
+                    style={[styles.nearbyChip, nearbyFilter === f.key ? styles.nearbyChipActive : null]}
+                  >
+                    <Text style={[styles.nearbyChipText, nearbyFilter === f.key ? styles.nearbyChipTextActive : null]}>
+                      {f.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         }
         contentContainerStyle={styles.listContent}
@@ -414,10 +445,15 @@ function createStyles(colors: ThemeColors) {
     onlineSection: { marginHorizontal: 16, marginBottom: 4 },
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginBottom: 14, height: 44, paddingHorizontal: 16, backgroundColor: colors.inputBg, borderRadius: 22 },
     searchInput: { flex: 1, fontSize: 15, color: colors.textPrimary },
-    tabs: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 14, gap: 10 },
+    tabs: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 10, gap: 10 },
     tab: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 20, backgroundColor: colors.surface },
     tabActive: { backgroundColor: colors.accent },
     tabText: { fontSize: 13, fontWeight: '500', color: colors.textMuted },
     tabTextActive: { color: '#fff', fontWeight: '600' },
+    nearbyFilters: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 14, gap: 8, flexWrap: 'wrap' },
+    nearbyChip: { paddingVertical: 5, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.cardBorder },
+    nearbyChipActive: { backgroundColor: colors.blueMuted, borderColor: colors.blue + '66' },
+    nearbyChipText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
+    nearbyChipTextActive: { color: colors.blue, fontWeight: '700' },
   });
 }

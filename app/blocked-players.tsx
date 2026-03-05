@@ -22,7 +22,7 @@ import { ThemeColors } from '@/constants/colors';
 interface BlockedProfile {
   id: string;
   name: string;
-  avatar_url: string | null;
+  avatar: string | null;
   skill_level: string | null;
 }
 
@@ -127,7 +127,7 @@ export default function BlockedPlayersScreen() {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('id, name, avatar_url, skill_level')
+        .select('id, name, avatar, skill_level')
         .in('id', blockedUsers);
       setProfiles((data ?? []) as BlockedProfile[]);
     } catch (e) {
@@ -164,7 +164,7 @@ export default function BlockedPlayersScreen() {
   const renderItem = useCallback(({ item }: { item: BlockedProfile }) => (
     <View style={styles.card}>
       <SafeImage
-        uri={item.avatar_url}
+        uri={item.avatar}
         name={item.name}
         style={styles.avatar}
         contentFit="cover"
