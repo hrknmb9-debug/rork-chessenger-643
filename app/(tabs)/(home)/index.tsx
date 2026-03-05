@@ -402,7 +402,7 @@ function createStyles(colors: ThemeColors) {
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     headerIconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
-    listContent: { paddingBottom: 100 },
+    listContent: { paddingBottom: 120 },
     listHeader: { paddingTop: 4, marginBottom: 4 },
     locationBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginBottom: 16 },
     locationChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.cardBorder },

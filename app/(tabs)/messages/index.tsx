@@ -110,7 +110,7 @@ function SwipeableConversation({
           <SafeImage
             uri={item.player.avatar}
             name={item.player.name}
-            style={styles.avatar}
+            style={[styles.avatar, isUnread && styles.avatarUnread]}
             contentFit="cover"
           />
           {item.player.isOnline && <View style={styles.onlineDot} />}
@@ -139,7 +139,7 @@ function SwipeableConversation({
             </Text>
             {isUnread && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.unreadCount}</Text>
+                <Text style={styles.badgeText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
               </View>
             )}
           </View>
@@ -434,6 +434,12 @@ export default function MessagesScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 function createStyles(colors: ThemeColors) {
+  const cardShadow = Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 8 },
+    android: { elevation: 2 },
+    web: { boxShadow: '0 1px 8px rgba(0,0,0,0.06)' } as any,
+  });
+
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -444,13 +450,16 @@ function createStyles(colors: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       marginHorizontal: 16,
-      marginTop: 12,
-      marginBottom: 6,
+      marginTop: 14,
+      marginBottom: 10,
       backgroundColor: colors.surface,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      height: 42,
+      borderRadius: 18,
+      paddingHorizontal: 16,
+      height: 46,
       gap: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      ...cardShadow,
     },
     searchInput: {
       flex: 1,
@@ -460,12 +469,17 @@ function createStyles(colors: ThemeColors) {
     // List
     listContent: {
       paddingTop: 4,
-      paddingBottom: 24,
+      paddingHorizontal: 12,
+      paddingBottom: 110,
+      gap: 6,
     },
     // Swipeable actions
     rightActions: {
       flexDirection: 'row',
       width: 198,
+      marginLeft: 8,
+      borderRadius: 20,
+      overflow: 'hidden',
     },
     actionBtn: {
       flex: 1,
@@ -474,42 +488,51 @@ function createStyles(colors: ThemeColors) {
       gap: 5,
     },
     actionLabel: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '600' as const,
       color: '#ffffff',
       textAlign: 'center' as const,
     },
-    // Conversation row — no bottom border, spacing via padding only
+    // Conversation card
     conversationItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 13,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       gap: 14,
-      backgroundColor: colors.background,
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      ...cardShadow,
     },
     conversationPressed: {
-      backgroundColor: colors.surfaceLight,
+      opacity: 0.85,
+      transform: [{ scale: 0.99 }],
     },
     avatarWrapper: {
       position: 'relative',
     },
     avatar: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: 54,
+      height: 54,
+      borderRadius: 27,
       backgroundColor: colors.surfaceLight,
+    },
+    avatarUnread: {
+      borderWidth: 2.5,
+      borderColor: colors.accent,
     },
     onlineDot: {
       position: 'absolute',
-      bottom: 2,
-      right: 2,
-      width: 14,
-      height: 14,
-      borderRadius: 7,
+      bottom: 1,
+      right: 1,
+      width: 13,
+      height: 13,
+      borderRadius: 6.5,
       backgroundColor: '#22C55E',
       borderWidth: 2.5,
-      borderColor: colors.background,
+      borderColor: colors.card,
     },
     conversationBody: {
       flex: 1,
@@ -530,12 +553,12 @@ function createStyles(colors: ThemeColors) {
       fontWeight: '700' as const,
     },
     timestamp: {
-      fontSize: 12,
+      fontSize: 11,
       color: colors.textMuted,
       marginLeft: 8,
     },
     timestampUnread: {
-      color: colors.gold,
+      color: colors.accent,
       fontWeight: '600' as const,
     },
     previewRow: {
@@ -545,25 +568,25 @@ function createStyles(colors: ThemeColors) {
     },
     previewText: {
       flex: 1,
-      fontSize: 14,
+      fontSize: 13,
       color: colors.textMuted,
-      lineHeight: 19,
+      lineHeight: 18,
     },
     previewTextUnread: {
       color: colors.textSecondary,
       fontWeight: '500' as const,
     },
     badge: {
-      backgroundColor: '#EF4444',
+      backgroundColor: colors.red,
       minWidth: 20,
       height: 20,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 6,
+      paddingHorizontal: 5,
     },
     badgeText: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '700' as const,
       color: '#ffffff',
     },
@@ -620,7 +643,7 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.gold,
       paddingHorizontal: 40,
       paddingVertical: 15,
-      borderRadius: 16,
+      borderRadius: 20,
     },
     loginButtonText: {
       fontSize: 16,

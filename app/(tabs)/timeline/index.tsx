@@ -1485,7 +1485,7 @@ const expandedImageStyles = StyleSheet.create({
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    listContent: { paddingBottom: 20 },
+    listContent: { paddingBottom: 120 },
     filterTabs: { flexDirection: 'row', alignSelf: 'center', backgroundColor: colors.surface, borderRadius: 999, padding: 5, marginBottom: 14, borderWidth: 1, borderColor: colors.cardBorder },
     filterTab: { flex: 1, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 999, alignItems: 'center' as const, justifyContent: 'center' as const },
     filterTabActive: { backgroundColor: colors.gold },

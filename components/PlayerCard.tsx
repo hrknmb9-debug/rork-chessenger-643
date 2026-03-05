@@ -149,17 +149,25 @@ function getPlayStyleLabel(ps: PlayStyle, lang: string): string {
 export const PlayerCard = React.memo(PlayerCardComponent);
 
 function createStyles(colors: ThemeColors) {
+  const cardShadow = Platform.select({
+    ios: { shadowColor: colors.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 16 },
+    android: { elevation: 3 },
+    web: { boxShadow: '0 4px 16px rgba(124,58,237,0.07)' } as any,
+  });
+
   return StyleSheet.create({
     container: {
       marginHorizontal: 16,
       marginBottom: 12,
+      ...cardShadow,
     },
     pressable: {
       backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 16,
+      borderRadius: 22,
+      padding: 18,
       borderWidth: 1,
       borderColor: colors.cardBorder,
+      overflow: 'hidden',
     },
     header: {
       flexDirection: 'row',
