@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   Alert,
   InteractionManager,
   Platform,
+  Modal,
+  Share,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -24,7 +27,11 @@ import {
   Star,
   Users,
   Languages,
+  QrCode,
+  Share2,
+  X,
 } from 'lucide-react-native';
+import QRCodeSVG from 'react-native-qrcode-svg';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useChess } from '@/providers/ChessProvider';
@@ -68,6 +75,40 @@ export default function ProfileScreen() {
   const { profile, language, accessToken, activeMatches } = useChess();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [showQR, setShowQR] = useState(false);
+  const qrModalScale = useRef(new Animated.Value(0.85)).current;
+  const qrModalOpacity = useRef(new Animated.Value(0)).current;
+
+  const profileDeepLink = `rork-app://player/${profile?.id ?? user?.id ?? ''}`;
+
+  const openQR = useCallback(() => {
+    setShowQR(true);
+    Animated.parallel([
+      Animated.spring(qrModalScale, { toValue: 1, speed: 18, bounciness: 8, useNativeDriver: true }),
+      Animated.timing(qrModalOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, [qrModalScale, qrModalOpacity]);
+
+  const closeQR = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(qrModalScale, { toValue: 0.85, speed: 20, bounciness: 0, useNativeDriver: true }),
+      Animated.timing(qrModalOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
+    ]).start(() => setShowQR(false));
+  }, [qrModalScale, qrModalOpacity]);
+
+  const handleShareQR = useCallback(async () => {
+    try {
+      await Share.share({
+        message: language === 'ja'
+          ? `ChessengerでCHESSENGERを探してください！\n${profileDeepLink}`
+          : `Find me on Chessenger!\n${profileDeepLink}`,
+        url: profileDeepLink,
+        title: 'Chessenger プロフィール',
+      });
+    } catch {
+      // ignore cancel
+    }
+  }, [profileDeepLink, language]);
   const [hostedEvents, setHostedEvents] = useState<HostedEventWithParticipants[]>([]);
   const [loadingHosted, setLoadingHosted] = useState(false);
   const [bioTranslationState, setBioTranslationState] = useState<{ loading: boolean; localTranslatedContent: string | null }>({ loading: false, localTranslatedContent: null });
@@ -227,11 +268,78 @@ export default function ProfileScreen() {
           <Pressable onPress={() => router.push('/profile/favorites' as any)} style={styles.headerBtn}>
             <Star size={22} color={colors.accent} />
           </Pressable>
+          <Pressable onPress={openQR} style={styles.headerBtn}>
+            <QrCode size={22} color={colors.textPrimary} />
+          </Pressable>
           <Pressable onPress={() => router.push('/settings' as any)} style={styles.headerBtn}>
             <Settings size={22} color={colors.textPrimary} />
           </Pressable>
         </View>
       </SafeAreaView>
+
+      {/* QRコードモーダル */}
+      <Modal
+        visible={showQR}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={closeQR}
+      >
+        <Pressable style={styles.qrOverlay} onPress={closeQR}>
+          <Animated.View
+            style={[styles.qrSheet, { opacity: qrModalOpacity, transform: [{ scale: qrModalScale }] }]}
+            onStartShouldSetResponder={() => true}
+            onTouchEnd={e => e.stopPropagation()}
+          >
+            {/* ヘッダー */}
+            <View style={styles.qrHeader}>
+              <Text style={styles.qrTitle}>
+                {language === 'ja' ? 'プロフィールQR' : 'Profile QR'}
+              </Text>
+              <Pressable onPress={closeQR} style={styles.qrCloseBtn} hitSlop={12}>
+                <X size={20} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            {/* QR コード */}
+            <View style={styles.qrCodeWrap}>
+              <View style={styles.qrCodeInner}>
+                {profile?.id && (
+                  <QRCodeSVG
+                    value={profileDeepLink}
+                    size={220}
+                    backgroundColor="transparent"
+                    color={colors.textPrimary}
+                    logo={{ uri: resolveAvatarUrl(profile.avatar, profile.name) }}
+                    logoSize={44}
+                    logoBackgroundColor="#fff"
+                    logoBorderRadius={22}
+                    logoMargin={4}
+                  />
+                )}
+              </View>
+            </View>
+
+            {/* ユーザー名 */}
+            <Text style={styles.qrName}>{profile?.name ?? user?.name}</Text>
+            <Text style={styles.qrSub} numberOfLines={1}>{profileDeepLink}</Text>
+
+            {/* シェアボタン */}
+            <Pressable onPress={handleShareQR} style={styles.qrShareBtn}>
+              <Share2 size={18} color="#fff" />
+              <Text style={styles.qrShareText}>
+                {language === 'ja' ? 'プロフィールをシェア' : 'Share Profile'}
+              </Text>
+            </Pressable>
+
+            <Text style={styles.qrHint}>
+              {language === 'ja'
+                ? 'QRコードをカメラで読み取るとプロフィールに飛べます'
+                : 'Scan with camera to open this profile'}
+            </Text>
+          </Animated.View>
+        </Pressable>
+      </Modal>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Avatar + Name */}
@@ -437,7 +545,7 @@ function createStyles(colors: any) {
       justifyContent: 'center',
       ...(cardShadow ?? {}),
     },
-    scrollContent: { paddingBottom: 56 },
+    scrollContent: { paddingBottom: 140 },
 
     /* Profile top */
     profileInfo: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 20 },
@@ -642,6 +750,98 @@ function createStyles(colors: any) {
       borderRadius: 20,
       ...(cardShadow ?? {}),
     },
-    /* Logout */
+
+    /* QRモーダル */
+    qrOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+    },
+    qrSheet: {
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: colors.surface,
+      borderRadius: 32,
+      paddingHorizontal: 24,
+      paddingTop: 20,
+      paddingBottom: 28,
+      alignItems: 'center',
+      ...Platform.select({
+        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.2, shadowRadius: 32 },
+        android: { elevation: 16 },
+      }),
+    },
+    qrHeader: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 20,
+    },
+    qrTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      letterSpacing: -0.3,
+    },
+    qrCloseBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.surfaceLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    qrCodeWrap: {
+      padding: 16,
+      backgroundColor: '#fff',
+      borderRadius: 24,
+      marginBottom: 18,
+      ...Platform.select({
+        ios: { shadowColor: colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 16 },
+        android: { elevation: 4 },
+      }),
+    },
+    qrCodeInner: {
+      padding: 8,
+    },
+    qrName: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    qrSub: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginBottom: 20,
+      maxWidth: 280,
+      textAlign: 'center',
+    },
+    qrShareBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.accent,
+      paddingHorizontal: 28,
+      paddingVertical: 14,
+      borderRadius: 20,
+      marginBottom: 12,
+      width: '100%',
+      justifyContent: 'center',
+    },
+    qrShareText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 15,
+    },
+    qrHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
   });
 }

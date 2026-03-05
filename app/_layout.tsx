@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState, useCallback } from "react";
 import { LogBox, Platform, View, StatusBar } from "react-native";
+import * as Linking from "expo-linking";
 import { setupNotificationHandler } from "@/utils/notifications";
 
 setupNotificationHandler();
@@ -28,6 +29,35 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const { colors, isDark } = useTheme();
   const backTitle = Platform.OS === 'ios' ? ' ' : undefined;
+  const router = useRouter();
+
+  // ディープリンク rork-app://player/:id の処理
+  useEffect(() => {
+    const handleUrl = (url: string) => {
+      try {
+        const parsed = Linking.parse(url);
+        // rork-app://player/SOME_UUID
+        if (parsed.scheme === 'rork-app' && parsed.hostname === 'player' && parsed.path) {
+          const playerId = parsed.path.replace(/^\//, '');
+          if (playerId) {
+            router.push(`/player/${playerId}` as any);
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    // アプリが既に起動している状態でディープリンクが来た場合
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+
+    // アプリが閉じている状態からディープリンクで起動された場合
+    Linking.getInitialURL().then(url => {
+      if (url) handleUrl(url);
+    }).catch(() => {});
+
+    return () => subscription.remove();
+  }, [router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>

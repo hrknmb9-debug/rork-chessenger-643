@@ -817,7 +817,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '500',
-    paddingBottom: 16,
+    paddingBottom: 110,
     opacity: 0.6,
   },
 
