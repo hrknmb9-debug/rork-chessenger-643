@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { LogBox, Platform, View, StatusBar } from "react-native";
 
 LogBox.ignoreLogs([
@@ -14,6 +14,7 @@ import { LocationProvider } from "@/providers/LocationProvider";
 import { ChessProvider } from "@/providers/ChessProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { ThemeProvider, useTheme } from "@/providers/ThemeProvider";
+import { AnimatedLogoSplash } from "@/components/AnimatedLogoSplash";
 
 // スプラッシュ画面を自動で隠さないように設定
 SplashScreen.preventAutoHideAsync();
@@ -46,13 +47,18 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+  }, []);
+
   useEffect(() => {
-    // 起動時に少し待ってからスプラッシュを消す
-    const hideSplash = async () => {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    // ネイティブスプラッシュを早めに隠してカスタムアニメーションを表示
+    const t = setTimeout(async () => {
       await SplashScreen.hideAsync();
-    };
-    hideSplash();
+    }, 250);
+    return () => clearTimeout(t);
   }, []);
 
   return (
@@ -63,6 +69,9 @@ export default function RootLayout() {
             <ChessProvider>
               <ThemeProvider>
                 <RootLayoutNav />
+                {showSplash && (
+                  <AnimatedLogoSplash onComplete={handleSplashComplete} />
+                )}
               </ThemeProvider>
             </ChessProvider>
           </LocationProvider>
