@@ -18,11 +18,9 @@ import {
   Trophy,
   Swords,
   Calendar,
-  ExternalLink,
   ShieldCheck,
   MapPin,
   Clock,
-  Flag,
   Star,
   Users,
   Languages,
@@ -408,22 +406,6 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        {/* Link Accounts */}
-        <View style={styles.menuSection}>
-          <Text style={styles.sectionTitle}>Link Accounts</Text>
-          <Pressable style={styles.menuItem}>
-            <View style={styles.menuItemLeft}>
-              <Text style={styles.menuItemText}>Chess.com</Text>
-            </View>
-            <View style={styles.menuItemRight}>
-              <Text style={styles.linkStatus}>
-                {profile.chessComRating || user.chessComRating ? 'Connected' : 'Not Linked'}
-              </Text>
-              <ExternalLink size={16} color={colors.textMuted} />
-            </View>
-          </Pressable>
-        </View>
-
         <Pressable onPress={logout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>{t('logout', language)}</Text>
         </Pressable>
@@ -649,11 +631,6 @@ function createStyles(colors: any) {
       borderWidth: 1,
       borderColor: colors.cardBorder,
     },
-    menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    menuItemText: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
-    menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    linkStatus: { fontSize: 14, color: colors.textMuted },
-
     /* Logout */
     logoutBtn: { marginTop: 40, paddingVertical: 12, alignItems: 'center' },
     logoutText: { color: '#FF3B30', fontWeight: '600', fontSize: 15 },

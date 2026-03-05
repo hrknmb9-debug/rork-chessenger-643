@@ -17,13 +17,16 @@ import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import { t } from '@/utils/translations';
 import { BackNavButton } from '@/components/BackNavButton';
+import { supabase } from '@/utils/supabaseClient';
 
 export default function ChangePasswordScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { language } = useChess();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [currentPassword, setCurrentPassword] = useState<string>('');
@@ -37,12 +40,12 @@ export default function ChangePasswordScreen() {
       return;
     }
 
-    if (currentPassword.length < 4) {
+    if (currentPassword.length < 6) {
       Alert.alert(t('error', language), t('password_wrong', language));
       return;
     }
 
-    if (newPassword.length < 4) {
+    if (newPassword.length < 6) {
       Alert.alert(t('error', language), t('password_too_short', language));
       return;
     }
@@ -56,7 +59,21 @@ export default function ChangePasswordScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Verify current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email ?? '',
+        password: currentPassword,
+      });
+      if (signInError) {
+        Alert.alert(t('error', language), t('password_wrong', language));
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        Alert.alert(t('error', language), error.message || t('password_change_error', language));
+        return;
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
@@ -69,7 +86,7 @@ export default function ChangePasswordScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [currentPassword, newPassword, confirmPassword, language, router]);
+  }, [currentPassword, newPassword, confirmPassword, user?.email, language, router]);
 
   return (
     <View style={styles.container}>

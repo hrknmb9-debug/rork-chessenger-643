@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import Constants from 'expo-constants';
 import {
   View,
   Text,
@@ -39,6 +40,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useLocation } from '@/providers/LocationProvider';
+import { supabase } from '@/utils/supabaseClient';
 import { t } from '@/utils/translations';
 import { LanguageSelector } from '@/components/LanguageSelector';
 import { BackNavButton } from '@/components/BackNavButton';
@@ -97,8 +99,28 @@ export default function SettingsScreen() {
           text: t('delete_account', language),
           style: 'destructive',
           onPress: () => {
-            logout();
-            router.replace('/login' as any);
+            Alert.alert(
+              t('delete_account', language),
+              t('delete_account_final', language),
+              [
+                { text: t('cancel', language), style: 'cancel' },
+                {
+                  text: t('delete_account', language),
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const { data, error } = await supabase.functions.invoke('delete-user');
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      await logout();
+                      router.replace('/login' as any);
+                    } catch (e) {
+                      Alert.alert(t('error', language), t('delete_account_error', language));
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -343,7 +365,9 @@ export default function SettingsScreen() {
                 <Info size={16} color={colors.textSecondary} />
               </View>
               <Text style={styles.rowText}>{t('app_version', language)}</Text>
-              <Text style={styles.versionText}>1.0.0</Text>
+              <Text style={styles.versionText}>
+                {Constants.expoConfig?.version ?? Constants.manifest?.version ?? '1.0.0'}
+              </Text>
             </View>
           </View>
         </View>

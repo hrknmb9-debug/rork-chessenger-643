@@ -19,13 +19,14 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { useChess } from '@/providers/ChessProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { t } from '@/utils/translations';
+import { supabase } from '@/utils/supabaseClient';
 import { BackNavButton } from '@/components/BackNavButton';
 
 export default function ChangeEmailScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { language } = useChess();
-  const { user, updateProfile } = useAuth();
+  const { user, reloadUser } = useAuth();
   const router = useRouter();
 
   const [newEmail, setNewEmail] = useState<string>('');
@@ -52,13 +53,17 @@ export default function ChangeEmailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await updateProfile({ email: newEmail });
-      
+      const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+      if (error) {
+        Alert.alert(t('error', language), error.message || t('email_change_error', language));
+        return;
+      }
+      await reloadUser();
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
         t('email_change_success', language),
-        '',
+        t('email_change_verification_sent', language),
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (e) {
@@ -66,7 +71,7 @@ export default function ChangeEmailScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [newEmail, confirmEmail, language, updateProfile, router]);
+  }, [newEmail, confirmEmail, language, reloadUser, router]);
 
   return (
     <View style={styles.container}>
