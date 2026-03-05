@@ -765,6 +765,7 @@ export default function TimelineScreen() {
   const [showComposer, setShowComposer] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [postImageUrl, setPostImageUrl] = useState<string | null>(null);
+  const [postImageBase64, setPostImageBase64] = useState<string | null>(null);
   const [showEventModal, setShowEventModal] = useState<boolean>(false);
   const [eventTitle, setEventTitle] = useState<string>('');
   const [eventDate, setEventDate] = useState<Date>(new Date());
@@ -844,11 +845,20 @@ export default function TimelineScreen() {
     if (!newPostText.trim()) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     let imageUrl: string | undefined = postImageUrl ?? undefined;
-    if (imageUrl && (imageUrl.startsWith('file://') || !imageUrl.startsWith('http'))) {
+    if (imageUrl && !imageUrl.startsWith('http')) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const result = await uploadTimelineImage(imageUrl, user.id);
-        imageUrl = 'url' in result ? result.url : undefined;
+        const result = await uploadTimelineImage(
+          imageUrl,
+          user.id,
+          postImageBase64 ?? undefined
+        );
+        if ('url' in result) {
+          imageUrl = result.url;
+        } else {
+          Alert.alert('エラー', result.error);
+          imageUrl = undefined;
+        }
       } else {
         imageUrl = undefined;
       }
@@ -856,18 +866,26 @@ export default function TimelineScreen() {
     addTimelinePost(newPostText.trim(), 'general', imageUrl);
     setNewPostText('');
     setPostImageUrl(null);
+    setPostImageBase64(null);
     setShowComposer(false);
-  }, [newPostText, addTimelinePost, postImageUrl]);
+  }, [newPostText, addTimelinePost, postImageUrl, postImageBase64]);
 
   const handlePickImage = useCallback(async () => {
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('権限が必要です', 'フォトライブラリへのアクセスを許可してください。');
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.7,
+        quality: 0.8,
+        base64: true,
       });
       if (!result.canceled && result.assets[0]) {
         setPostImageUrl(result.assets[0].uri);
+        setPostImageBase64(result.assets[0].base64 ?? null);
       }
     } catch (e) {
       console.log('Image picker error', e);
@@ -1147,7 +1165,7 @@ export default function TimelineScreen() {
           {postImageUrl && (
             <View style={styles.imagePreviewContainer}>
               <SafeImage uri={postImageUrl} name="" style={styles.imagePreview} contentFit="cover" />
-              <Pressable onPress={() => setPostImageUrl(null)} style={styles.removeImageBtn}>
+              <Pressable onPress={() => { setPostImageUrl(null); setPostImageBase64(null); }} style={styles.removeImageBtn}>
                 <XIcon size={14} color={colors.white} />
               </Pressable>
             </View>
@@ -1157,7 +1175,7 @@ export default function TimelineScreen() {
               <Camera size={18} color={colors.blue} />
             </Pressable>
             <View style={{ flex: 1 }} />
-            <Pressable onPress={() => { setShowComposer(false); setNewPostText(''); setPostImageUrl(null); }} style={styles.composerCancel}>
+            <Pressable onPress={() => { setShowComposer(false); setNewPostText(''); setPostImageUrl(null); setPostImageBase64(null); }} style={styles.composerCancel}>
               <Text style={styles.composerCancelText}>{t('cancel', language)}</Text>
             </Pressable>
             <Pressable

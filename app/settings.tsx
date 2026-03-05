@@ -33,6 +33,7 @@ import {
   Navigation,
   MapPinOff,
   LogOut,
+  UserX,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemeColors } from '@/constants/colors';
@@ -304,6 +305,16 @@ export default function SettingsScreen() {
                 thumbColor={distanceVisible ? colors.gold : colors.textMuted}
               />
             </View>
+
+            <View style={styles.rowDivider} />
+
+            <Pressable onPress={() => router.push('/blocked-players' as any)} style={styles.row}>
+              <View style={[styles.iconCircle, { backgroundColor: colors.redMuted }]}>
+                <UserX size={16} color={colors.red} />
+              </View>
+              <Text style={styles.rowText}>{t('blocked_users', language)}</Text>
+              <ChevronRight size={16} color={colors.textMuted} />
+            </Pressable>
           </View>
         </View>
 
