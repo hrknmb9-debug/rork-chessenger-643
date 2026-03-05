@@ -790,6 +790,10 @@ export default function TimelineScreen() {
   const [editEventDate, setEditEventDate] = useState<Date>(new Date());
   const [editEventHour, setEditEventHour] = useState<number>(14);
   const [editEventMinute, setEditEventMinute] = useState<number>(0);
+  const [editEventDeadlineDate, setEditEventDeadlineDate] = useState<Date>(new Date());
+  const [editEventDeadlineHour, setEditEventDeadlineHour] = useState<number>(23);
+  const [editEventDeadlineMinute, setEditEventDeadlineMinute] = useState<number>(59);
+  const [editHasDeadline, setEditHasDeadline] = useState<boolean>(false);
   const [editEventLocation, setEditEventLocation] = useState<string>('');
   const [editEventMaxParticipants, setEditEventMaxParticipants] = useState<string>('10');
 
@@ -1011,6 +1015,19 @@ export default function TimelineScreen() {
       const [h, min] = (post.event.time || '14:00').split(':').map(Number);
       setEditEventHour(Number.isNaN(h) ? 14 : h);
       setEditEventMinute(Number.isNaN(min) ? 0 : min);
+      // 締切日の初期化
+      if (post.event.deadlineAt) {
+        const dl = new Date(post.event.deadlineAt);
+        setEditEventDeadlineDate(dl);
+        setEditEventDeadlineHour(dl.getHours());
+        setEditEventDeadlineMinute(dl.getMinutes());
+        setEditHasDeadline(true);
+      } else {
+        setEditEventDeadlineDate(new Date());
+        setEditEventDeadlineHour(23);
+        setEditEventDeadlineMinute(59);
+        setEditHasDeadline(false);
+      }
       setEditEventLocation(post.event.location || '');
       setEditEventMaxParticipants(String(post.event.maxParticipants ?? 10));
     }
@@ -1022,17 +1039,21 @@ export default function TimelineScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const updates: Parameters<typeof updateTimelinePost>[1] = { content: editContent };
     if (editingPost.event) {
+      const deadlineAt = editHasDeadline
+        ? `${formatDateForStorage(editEventDeadlineDate)}T${String(editEventDeadlineHour).padStart(2, '0')}:${String(editEventDeadlineMinute).padStart(2, '0')}:00`
+        : null;
       updates.event = {
         title: editEventTitle,
         date: formatDateForStorage(editEventDate),
         time: `${String(editEventHour).padStart(2, '0')}:${String(editEventMinute).padStart(2, '0')}`,
         location: editEventLocation,
         maxParticipants: parseInt(editEventMaxParticipants, 10) || 10,
+        deadlineAt,
       };
     }
     await updateTimelinePost(editingPost.id, updates);
     setEditingPost(null);
-  }, [editingPost, editContent, editEventTitle, editEventDate, editEventHour, editEventMinute, editEventLocation, editEventMaxParticipants, updateTimelinePost, formatDateForStorage]);
+  }, [editingPost, editContent, editEventTitle, editEventDate, editEventHour, editEventMinute, editHasDeadline, editEventDeadlineDate, editEventDeadlineHour, editEventDeadlineMinute, editEventLocation, editEventMaxParticipants, updateTimelinePost, formatDateForStorage]);
 
   const renderPost = useCallback(
     ({ item }: { item: TimelinePost }) => (
@@ -1450,6 +1471,46 @@ export default function TimelineScreen() {
                 <TextInput style={styles.modalInput} value={editEventLocation} onChangeText={setEditEventLocation} placeholderTextColor={colors.textMuted} />
                 <Text style={styles.modalLabel}>{t('event_max_participants', language)}</Text>
                 <TextInput style={styles.modalInput} value={editEventMaxParticipants} onChangeText={setEditEventMaxParticipants} keyboardType="number-pad" placeholderTextColor={colors.textMuted} />
+
+                {/* 締切日設定 */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, marginBottom: 4 }}>
+                  <Text style={styles.modalLabel}>{language === 'ja' ? '締切日を設定' : 'Set Deadline'}</Text>
+                  <Pressable
+                    onPress={() => setEditHasDeadline(v => !v)}
+                    style={[styles.pickerArrow, { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: editHasDeadline ? colors.gold : colors.surface }]}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: editHasDeadline ? colors.white : colors.textMuted }}>
+                      {editHasDeadline ? (language === 'ja' ? 'ON' : 'ON') : (language === 'ja' ? 'OFF' : 'OFF')}
+                    </Text>
+                  </Pressable>
+                </View>
+                {editHasDeadline && (
+                  <>
+                    <Text style={styles.modalLabel}>{language === 'ja' ? '締切日' : 'Deadline Date'}</Text>
+                    <View style={[styles.pickerRow, { justifyContent: 'center', gap: 16 }]}>
+                      <Pressable onPress={() => setEditEventDeadlineDate(prev => { const n = new Date(prev); n.setDate(n.getDate() - 1); return n; })} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>◀</Text>
+                      </Pressable>
+                      <Text style={styles.pickerValue}>{formatDateDisplay(editEventDeadlineDate)}</Text>
+                      <Pressable onPress={() => setEditEventDeadlineDate(prev => { const n = new Date(prev); n.setDate(n.getDate() + 1); return n; })} style={styles.pickerArrow}>
+                        <Text style={styles.pickerArrowText}>▶</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={styles.modalLabel}>{language === 'ja' ? '締切時刻' : 'Deadline Time'}</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      value={`${String(editEventDeadlineHour).padStart(2, '0')}:${String(editEventDeadlineMinute).padStart(2, '0')}`}
+                      onChangeText={(v) => {
+                        const [dh, dm] = v.split(':').map(Number);
+                        if (!Number.isNaN(dh)) setEditEventDeadlineHour(Math.max(0, Math.min(23, dh)));
+                        if (!Number.isNaN(dm)) setEditEventDeadlineMinute(Math.max(0, Math.min(59, dm)));
+                      }}
+                      placeholder="HH:MM"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </>
+                )}
               </>
             )}
             <Pressable onPress={handleSaveEdit} style={styles.modalSubmitBtn}>

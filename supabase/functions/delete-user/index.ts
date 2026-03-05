@@ -56,18 +56,52 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    // ── 依存データを順に削除 ──────────────────────────────────────────────
+    // ── 依存データを FK 制約の順に削除 ────────────────────────────────────
 
-    // メッセージ（送受信問わず自分が絡む room を消す）
+    // ブロック（双方向）
+    await db.from('blocks').delete().eq('blocker_id', userId);
+    await db.from('blocks').delete().eq('blocked_id', userId);
+
+    // 通報（双方向）
+    await db.from('reports').delete().eq('reporter_id', userId);
+    await db.from('reports').delete().eq('reported_id', userId);
+
+    // マッチ結果報告（双方向）
+    await db.from('match_result_reports').delete().eq('reporter_id', userId);
+    await db.from('match_result_reports').delete().eq('opponent_id', userId);
+
+    // マッチ評価
+    await db.from('match_ratings').delete().eq('rater_id', userId);
+
+    // ユーザーが参加したマッチの room_id を取得してからメッセージを削除
+    const { data: userMatches } = await db
+      .from('matches')
+      .select('id')
+      .or(`requester_id.eq.${userId},opponent_id.eq.${userId},winner_id.eq.${userId}`);
+
+    if (userMatches?.length) {
+      const matchIds = userMatches.map((m: { id: string }) => m.id);
+      // そのマッチルームの全メッセージを削除（送受信問わず）
+      await db.from('messages').delete().in('room_id', matchIds);
+      // マッチ評価（match_id 経由）
+      await db.from('match_ratings').delete().in('match_id', matchIds);
+      // マッチ結果報告（match_id 経由）
+      await db.from('match_result_reports').delete().in('match_id', matchIds);
+    }
+
+    // 送信者としてのメッセージ（room に含まれなかった分）
     await db.from('messages').delete().eq('sender_id', userId);
 
-    // マッチ（requester / opponent 両方）
+    // マッチ本体（requester / opponent / winner すべて）
     await db.from('matches').delete().eq('requester_id', userId);
     await db.from('matches').delete().eq('opponent_id', userId);
+    await db.from('matches').delete().eq('winner_id', userId);
 
     // お気に入り（双方向）
-    await db.from('player_favorites').delete().eq('user_id', userId);
-    await db.from('player_favorites').delete().eq('favorite_player_id', userId);
+    try {
+      await db.from('player_favorites').delete().eq('user_id', userId);
+      await db.from('player_favorites').delete().eq('favorite_player_id', userId);
+    } catch (_) { /* テーブルが存在しない場合は無視 */ }
 
     // イベント参加
     await db.from('event_participants').delete().eq('user_id', userId);
@@ -76,9 +110,12 @@ serve(async (req) => {
     await db.from('post_likes').delete().eq('user_id', userId);
     await db.from('comments').delete().eq('user_id', userId);
 
-    // 通知
+    // 通知（送受信）
     await db.from('notifications').delete().eq('user_id', userId);
-    await db.from('notifications').delete().eq('related_user_id', userId);
+    // related_id で参照されている通知（カラムが存在する場合のみ）
+    try {
+      await db.from('notifications').delete().eq('related_user_id', userId);
+    } catch (_) { /* カラムが存在しない場合は無視 */ }
 
     // 自分の投稿に紐づくサブリソースを消してから投稿本体を削除
     const { data: userPosts } = await db.from('posts').select('id').eq('user_id', userId);

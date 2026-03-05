@@ -36,7 +36,6 @@ import { useChess } from '@/providers/ChessProvider';
 import { useLocation } from '@/providers/LocationProvider';
 import {
   getSkillLabel,
-  getWinRate,
   formatDistance,
   formatRating,
 } from '@/utils/helpers';
@@ -78,7 +77,6 @@ export default function PlayerDetailScreen() {
   const sentAnim = useRef(new Animated.Value(0)).current;
 
   const player = useMemo(() => players.find(p => p.id === id), [players, id]);
-  const winRate = useMemo(() => (player ? getWinRate(player.wins, player.gamesPlayed) : 0), [player]);
   const playerBlocked = useMemo(() => (id ? isUserBlocked(id) : false), [id, isUserBlocked]);
   const isFavorite = useMemo(() => (id ? favoritePlayerIds.has(id) : false), [id, favoritePlayerIds]);
 
@@ -327,20 +325,6 @@ export default function PlayerDetailScreen() {
           </View>
         )}
 
-        {/* Win rate (player-only, profile-style card) */}
-        <View style={styles.infoSection}>
-          <View style={styles.winRateRow}>
-            <View style={styles.winRateInfo}>
-              <Trophy size={16} color={colors.gold} />
-              <Text style={styles.winRateLabel}>{t('win_rate', language)}</Text>
-            </View>
-            <View style={styles.winRateBarBg}>
-              <View style={[styles.winRateBarFill, { width: (winRate + '%') as any }]} />
-            </View>
-            <Text style={styles.winRatePercent}>{winRate + '%'}</Text>
-          </View>
-        </View>
-
         <View style={{ height: 120 }} />
       </ScrollView>
 
@@ -522,22 +506,6 @@ function createStyles(colors: ThemeColors) {
     tagChipEmoji: { fontSize: 14 },
     tagChipText: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
 
-    /* Win rate row (profile-style card) */
-    winRateRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 16,
-      padding: 14,
-      gap: 10,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    winRateInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    winRateLabel: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
-    winRateBarBg: { flex: 1, height: 6, backgroundColor: colors.surfaceHighlight, borderRadius: 3, overflow: 'hidden' },
-    winRateBarFill: { height: '100%', backgroundColor: colors.gold, borderRadius: 3 },
-    winRatePercent: { fontSize: 15, fontWeight: '700', color: colors.gold, minWidth: 40, textAlign: 'right' },
 
     /* Player actions bar */
     bottomBar: {

@@ -178,9 +178,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         await AsyncStorage.removeItem(AUTH_KEY);
         console.log('Auth: SIGNED_OUT - user cleared');
         // initialLoadDone 後の SIGNED_OUT はセッション切れ → ログイン画面へ強制遷移
+        // push ではなく replace を使い、(tabs) がモーダルの裏に残らないようにする
         if (initialLoadDone.current) {
           try {
-            router.push('/login' as any);
+            router.replace('/login' as any);
           } catch (navErr) {
             console.log('Auth: Navigation to login failed', navErr);
           }

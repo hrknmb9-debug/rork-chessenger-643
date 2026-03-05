@@ -265,7 +265,8 @@ export default function LoginScreen() {
         const success = await login(email, password);
         if (success) {
           playLoginSuccessSound().catch(() => {});
-          router.replace('/(tabs)' as any);
+          // navigate はスタックに既に (tabs) があれば pop-to-root、なければ push する
+          router.navigate('/(tabs)' as any);
         }
       } else {
         const result = await register(name, email, password, {
@@ -276,7 +277,7 @@ export default function LoginScreen() {
         });
         if (result.success) {
           playLoginSuccessSound().catch(() => {});
-          router.replace('/(tabs)' as any);
+          router.navigate('/(tabs)' as any);
         }
       }
     } finally {
