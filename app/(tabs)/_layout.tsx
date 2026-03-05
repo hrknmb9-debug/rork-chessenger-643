@@ -91,6 +91,7 @@ export default function TabLayout() {
         name="matches"
         options={{
           title: t('tab_matches', language),
+          tabBarBadge: matchBadge > 0 ? matchBadge : undefined,
           tabBarIcon: ({ color, size }) => (
             <BadgeIcon count={matchBadge} colors={colors}>
               <Swords size={size} color={color} />

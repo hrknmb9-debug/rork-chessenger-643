@@ -28,7 +28,6 @@ import {
   Heart,
   MessageCircle,
   Bell,
-  SlidersHorizontal,
   MapPin,
   Trophy,
   RotateCcw,
@@ -36,6 +35,7 @@ import {
 import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useChess } from '@/providers/ChessProvider';
+import { Player } from '@/types';
 import { supabase } from '@/utils/supabaseClient';
 import { resolveAvatarUrl } from '@/utils/avatarUrl';
 import { getCountryFlag, getCountryName } from '@/utils/translations';
@@ -81,6 +81,33 @@ const SKILL_META: Record<string, { label: string; emoji: string }> = {
 
 function getRoomId(a: string, b: string): string {
   return [a, b].sort().join('_');
+}
+
+function discoverProfileToPlayer(p: DiscoverProfile): Player {
+  return {
+    id: p.id,
+    name: p.name,
+    avatar: resolveAvatarUrl(p.avatar, p.name),
+    rating: p.rating ?? p.chessComRating ?? 0,
+    chessComRating: p.chessComRating ?? null,
+    lichessRating: null,
+    skillLevel: (p.skillLevel as Player['skillLevel']) ?? 'intermediate',
+    gamesPlayed: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    distance: 0,
+    isOnline: false,
+    lastActive: '',
+    bio: p.bio ?? '',
+    bioEn: '',
+    preferredTimeControl: p.preferredTimeControl ?? '15+10',
+    location: p.location ?? '',
+    coordinates: { latitude: 0, longitude: 0 },
+    languages: [],
+    country: p.country ?? undefined,
+    playStyles: p.playStyles as Player['playStyles'],
+  };
 }
 
 // ─── データ取得フック ─────────────────────────────────────────────────────────
@@ -341,7 +368,7 @@ const BackCard = memo(function BackCard({ profile, pan, depth }: BackCardProps) 
 export default function MatchDiscoverScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
-  const { language, pendingIncoming } = useChess();
+  const { sendMatchRequest, pendingIncoming } = useChess();
   const router = useRouter();
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -358,13 +385,18 @@ export default function MatchDiscoverScreen() {
   }, [pan]);
 
   const handleLike = useCallback(() => {
+    const p = profiles[currentIndex];
+    if (p) {
+      const player = discoverProfileToPlayer(p);
+      sendMatchRequest(player, p.preferredTimeControl ?? '15+10');
+    }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Animated.timing(pan, {
       toValue: { x: SCREEN_W + 120, y: 0 },
       duration: SWIPE_OUT_DURATION,
       useNativeDriver: false,
     }).start(advanceCard);
-  }, [pan, advanceCard]);
+  }, [profiles, currentIndex, sendMatchRequest, pan, advanceCard]);
 
   const handleSkip = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -468,10 +500,10 @@ export default function MatchDiscoverScreen() {
             </View>
           </View>
 
-          {/* 右: 通知 + フィルター */}
+          {/* 右: マッチ通知ベル */}
           <View style={styles.headerRight}>
             <Pressable
-              onPress={() => router.push('/settings' as any)}
+              onPress={() => router.push('/matches/notifications' as any)}
               style={[styles.headerIconBtn, { backgroundColor: isDark ? colors.surface : '#F3F4F6' }]}
             >
               <Bell size={20} color={colors.textPrimary} />
@@ -480,12 +512,6 @@ export default function MatchDiscoverScreen() {
                   <Text style={styles.headerBadgeText}>{matchBadgeCount > 9 ? '9+' : matchBadgeCount}</Text>
                 </View>
               )}
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/settings' as any)}
-              style={[styles.headerIconBtn, { backgroundColor: isDark ? colors.surface : '#F3F4F6' }]}
-            >
-              <SlidersHorizontal size={20} color={colors.textPrimary} />
             </Pressable>
           </View>
         </View>
