@@ -386,57 +386,62 @@ export default function SettingsScreen() {
 }
 
 function createStyles(colors: ThemeColors) {
+  const cardShadow = Platform.select({
+    ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16 },
+    android: { elevation: 3 },
+    web: { boxShadow: '0 4px 16px rgba(139,92,246,0.08)' } as any,
+  });
+
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
     scrollContent: {
-      paddingHorizontal: 16,
-      paddingTop: 16,
+      paddingHorizontal: 20,
+      paddingTop: 20,
     },
     section: {
-      marginBottom: 24,
+      marginBottom: 28,
     },
     sectionTitle: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '700' as const,
       color: colors.textMuted,
       textTransform: 'uppercase',
-      letterSpacing: 0.8,
+      letterSpacing: 1.2,
       marginBottom: 10,
-      marginLeft: 4,
+      marginLeft: 6,
     },
     sectionCard: {
       backgroundColor: colors.card,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
+      borderRadius: 20,
       overflow: 'hidden',
+      ...(cardShadow ?? {}),
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      gap: 12,
+      paddingVertical: 15,
+      paddingHorizontal: 18,
+      gap: 14,
     },
     switchRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 18,
+      gap: 14,
     },
     rowDivider: {
-      height: 1,
+      height: StyleSheet.hairlineWidth,
       backgroundColor: colors.divider,
-      marginLeft: 56,
+      marginLeft: 62,
     },
     iconCircle: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
+      width: 34,
+      height: 34,
+      borderRadius: 11,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -445,25 +450,26 @@ function createStyles(colors: ThemeColors) {
       fontSize: 15,
       color: colors.textPrimary,
       fontWeight: '500' as const,
+      letterSpacing: 0.1,
     },
     togglePill: {
-      width: 44,
-      height: 24,
-      borderRadius: 12,
+      width: 46,
+      height: 26,
+      borderRadius: 13,
       backgroundColor: colors.surfaceHighlight,
       justifyContent: 'center',
       paddingHorizontal: 3,
     },
     togglePillActive: {
-      backgroundColor: colors.gold + '33',
+      backgroundColor: colors.gold + '40',
     },
     togglePillLocation: {
-      backgroundColor: colors.blue + '33',
+      backgroundColor: colors.blue + '40',
     },
     toggleDot: {
-      width: 18,
-      height: 18,
-      borderRadius: 9,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
       backgroundColor: colors.textMuted,
     },
     toggleDotActive: {
@@ -484,10 +490,8 @@ function createStyles(colors: ThemeColors) {
       justifyContent: 'center',
       gap: 10,
       backgroundColor: colors.redMuted,
-      borderRadius: 16,
-      paddingVertical: 16,
-      borderWidth: 1,
-      borderColor: colors.red + '33',
+      borderRadius: 20,
+      paddingVertical: 17,
     },
     logoutText: {
       fontSize: 16,
@@ -495,7 +499,7 @@ function createStyles(colors: ThemeColors) {
       color: colors.red,
     },
     bottomSpacer: {
-      height: 40,
+      height: 48,
     },
   });
 }

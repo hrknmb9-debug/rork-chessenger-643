@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   InteractionManager,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -415,15 +416,21 @@ export default function ProfileScreen() {
 }
 
 function createStyles(colors: any) {
+  const cardShadow = Platform.select({
+    ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16 },
+    android: { elevation: 3 },
+    web: { boxShadow: '0 4px 16px rgba(139,92,246,0.08)' } as any,
+  });
+
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.background },
     safeArea: { backgroundColor: colors.background },
     header: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      gap: 16,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      gap: 12,
     },
     headerBtn: {
       width: 40,
@@ -432,17 +439,28 @@ function createStyles(colors: any) {
       backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
+      ...(cardShadow ?? {}),
     },
-    scrollContent: { paddingBottom: 48 },
+    scrollContent: { paddingBottom: 56 },
 
     /* Profile top */
     profileInfo: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 20 },
     avatarContainer: { position: 'relative', marginBottom: 16 },
-    avatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: colors.surface },
+    avatar: {
+      width: 108,
+      height: 108,
+      borderRadius: 54,
+      backgroundColor: colors.surfaceHighlight,
+      ...Platform.select({
+        ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 20 },
+        android: { elevation: 8 },
+        web: { boxShadow: '0 8px 24px rgba(139,92,246,0.22)' } as any,
+      }),
+    },
     verifiedBadge: {
       position: 'absolute',
-      bottom: 0,
-      right: 0,
+      bottom: 2,
+      right: 2,
       backgroundColor: colors.accent,
       width: 28,
       height: 28,
@@ -452,8 +470,8 @@ function createStyles(colors: any) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    userName: { fontSize: 24, fontWeight: '800', color: colors.textPrimary, marginBottom: 4 },
-    userHandle: { fontSize: 15, color: colors.textMuted, marginBottom: 12 },
+    userName: { fontSize: 26, fontWeight: '800', color: colors.textPrimary, marginBottom: 4, letterSpacing: -0.5 },
+    userHandle: { fontSize: 15, color: colors.textMuted, marginBottom: 14 },
 
     /* Location + Country */
     metaRow: {
@@ -461,20 +479,18 @@ function createStyles(colors: any) {
       flexWrap: 'wrap',
       justifyContent: 'center',
       gap: 8,
-      marginBottom: 14,
+      marginBottom: 16,
     },
     metaChip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
-      backgroundColor: colors.surface,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      backgroundColor: colors.surfaceHighlight,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
       borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
     },
-    metaChipText: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+    metaChipText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
 
     /* Bio 翻訳 */
     bioTranslateRow: {
@@ -493,45 +509,44 @@ function createStyles(colors: any) {
     /* Bio */
     bioContainer: {
       backgroundColor: colors.surface,
-      padding: 16,
-      borderRadius: 16,
+      padding: 18,
+      borderRadius: 20,
       width: '100%',
+      ...(cardShadow ?? {}),
     },
-    bioText: { fontSize: 14, color: colors.textPrimary, textAlign: 'center', lineHeight: 20 },
+    bioText: { fontSize: 14, color: colors.textPrimary, textAlign: 'center', lineHeight: 22 },
 
     /* Stats */
-    statsRow: { flexDirection: 'row', paddingHorizontal: 24, marginTop: 24, gap: 12 },
+    statsRow: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 24, gap: 12 },
     statBox: {
       flex: 1,
       backgroundColor: colors.surface,
-      paddingVertical: 16,
-      borderRadius: 20,
+      paddingVertical: 18,
+      borderRadius: 22,
       alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
+      ...(cardShadow ?? {}),
     },
     statIconWrap: { marginBottom: 8 },
-    statValue: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
-    statLabel: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+    statValue: { fontSize: 20, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 },
+    statLabel: { fontSize: 11, color: colors.textMuted, marginTop: 3, letterSpacing: 0.3 },
 
     /* Skill + Time */
-    infoSection: { paddingHorizontal: 24, marginTop: 16 },
+    infoSection: { paddingHorizontal: 20, marginTop: 16 },
     infoRow: { flexDirection: 'row', gap: 12 },
     infoCard: {
       flex: 1,
       backgroundColor: colors.surface,
-      borderRadius: 16,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
+      borderRadius: 20,
+      padding: 16,
+      ...(cardShadow ?? {}),
     },
     infoCardLabel: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '700',
       color: colors.textMuted,
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: 8,
+      letterSpacing: 0.8,
+      marginBottom: 10,
     },
     singleChip: {
       flexDirection: 'row',
@@ -541,65 +556,66 @@ function createStyles(colors: any) {
     singleChipEmoji: { fontSize: 16 },
     singleChipText: {
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight: '700',
       color: colors.textPrimary,
     },
 
     /* Play Styles */
-    tagsSection: { paddingHorizontal: 24, marginTop: 20 },
+    tagsSection: { paddingHorizontal: 20, marginTop: 20 },
     tagsSectionTitle: {
-      fontSize: 13,
+      fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
       textTransform: 'uppercase',
-      letterSpacing: 1,
-      marginBottom: 10,
+      letterSpacing: 1.2,
+      marginBottom: 12,
     },
     tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     tagChip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surfaceHighlight,
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
     },
     tagChipEmoji: { fontSize: 14 },
-    tagChipText: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+    tagChipText: { fontSize: 13, fontWeight: '600', color: colors.accent },
 
     /* Actions */
-    actionSection: { paddingHorizontal: 24, marginTop: 24 },
+    actionSection: { paddingHorizontal: 20, marginTop: 28 },
     editBtn: {
-      height: 50,
-      borderRadius: 25,
-      backgroundColor: colors.textPrimary,
+      height: 54,
+      borderRadius: 27,
+      backgroundColor: colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
+      ...Platform.select({
+        ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 16 },
+        android: { elevation: 6 },
+        web: { boxShadow: '0 6px 20px rgba(139,92,246,0.28)' } as any,
+      }),
     },
-    editBtnText: { color: colors.background, fontWeight: '700', fontSize: 16 },
+    editBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, letterSpacing: 0.3 },
 
     /* Hosted events participants */
-    hostedEventsSection: { marginTop: 24, paddingHorizontal: 24 },
+    hostedEventsSection: { marginTop: 24, paddingHorizontal: 20 },
     hostedLoading: { paddingVertical: 24, alignItems: 'center' },
     hostedEmpty: {
       alignItems: 'center',
-      paddingVertical: 32,
+      paddingVertical: 36,
       backgroundColor: colors.surface,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
+      borderRadius: 20,
+      ...(cardShadow ?? {}),
     },
     hostedEmptyText: { fontSize: 14, color: colors.textMuted, marginTop: 8 },
     hostedEventCard: {
       backgroundColor: colors.surface,
-      borderRadius: 16,
-      padding: 14,
+      borderRadius: 20,
+      padding: 16,
       marginBottom: 12,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
+      ...(cardShadow ?? {}),
     },
     hostedEventHeader: { marginBottom: 8 },
     hostedEventTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
@@ -612,27 +628,26 @@ function createStyles(colors: any) {
     hostedAvatarName: { fontSize: 11, color: colors.textSecondary, marginTop: 4, maxWidth: 64 },
 
     /* Menu */
-    menuSection: { marginTop: 32, paddingHorizontal: 24 },
+    menuSection: { marginTop: 32, paddingHorizontal: 20 },
     sectionTitle: {
-      fontSize: 13,
+      fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
       marginBottom: 12,
       textTransform: 'uppercase',
-      letterSpacing: 1,
+      letterSpacing: 1.2,
     },
     menuItem: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: colors.surface,
-      padding: 16,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
+      padding: 18,
+      borderRadius: 20,
+      ...(cardShadow ?? {}),
     },
     /* Logout */
     logoutBtn: { marginTop: 40, paddingVertical: 12, alignItems: 'center' },
-    logoutText: { color: '#FF3B30', fontWeight: '600', fontSize: 15 },
+    logoutText: { color: '#F43F5E', fontWeight: '600', fontSize: 15 },
   });
 }
