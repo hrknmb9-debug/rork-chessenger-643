@@ -12,6 +12,7 @@ import {
   notifyMatchRequest,
   notifyMatchResponse,
   notifyNewMessage,
+  notifyTimelineComment,
 } from '@/utils/notifications';
 import { playMessageNotificationSound } from '@/utils/messageNotificationSound';
 
@@ -1815,10 +1816,13 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         parent_id: parentId ?? null,
       });
       console.log('Comment synced to Supabase');
+
+      const actorName = profile?.name ?? 'Someone';
+      const { data: postRow } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+      const postOwnerId = postRow?.user_id;
+
       if (parentId) {
-        const actorName = profile?.name ?? 'Someone';
-        const { data: postRow } = await supabase.from('posts').select('user_id').eq('id', postId).single();
-        const postOwnerId = postRow?.user_id;
+        // 返信: 投稿者 + 親コメント投稿者に通知
         if (postOwnerId && postOwnerId !== userId) {
           await supabase.from('notifications').insert({
             user_id: postOwnerId,
@@ -1826,6 +1830,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             content: `${actorName}が返信しました`,
             related_id: postId,
           });
+          notifyTimelineComment(postOwnerId, actorName, true).catch(() => {});
         }
         const { data: parentRow } = await supabase.from('comments').select('user_id').eq('id', parentId).single();
         const parentAuthorId = parentRow?.user_id;
@@ -1836,6 +1841,18 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             content: `${actorName}が返信しました`,
             related_id: postId,
           });
+          notifyTimelineComment(parentAuthorId, actorName, true).catch(() => {});
+        }
+      } else {
+        // 直コメント: 投稿者に通知（自分以外）
+        if (postOwnerId && postOwnerId !== userId) {
+          await supabase.from('notifications').insert({
+            user_id: postOwnerId,
+            type: 'post_comment',
+            content: `${actorName}がコメントしました`,
+            related_id: postId,
+          });
+          notifyTimelineComment(postOwnerId, actorName, false).catch(() => {});
         }
       }
     } catch (e) {

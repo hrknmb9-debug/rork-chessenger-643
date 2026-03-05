@@ -216,6 +216,26 @@ export async function notifyMatchResponse(
   }
 }
 
+/** タイムライン投稿へのコメント通知 */
+export async function notifyTimelineComment(
+  postOwnerId: string,
+  commenterName: string,
+  isReply: boolean = false
+): Promise<void> {
+  const token = await getOpponentPushToken(postOwnerId);
+  if (token) {
+    const title = isReply
+      ? 'コメントへの返信 / Reply'
+      : 'タイムラインへのコメント / New Comment';
+    const body = isReply
+      ? `${commenterName}さんがコメントに返信しました`
+      : `${commenterName}さんがあなたの投稿にコメントしました`;
+    await sendPushNotification(token, title, body, {
+      type: isReply ? 'post_reply' : 'post_comment',
+    });
+  }
+}
+
 export async function notifyNewMessage(
   recipientId: string,
   senderName: string,

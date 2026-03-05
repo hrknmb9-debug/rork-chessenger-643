@@ -842,9 +842,14 @@ export default function TimelineScreen() {
   }, [router, currentUserId]);
 
   const handleNewPost = useCallback(async () => {
-    if (!newPostText.trim()) return;
+    const hasText = newPostText.trim().length > 0;
+    const hasImage = !!postImageUrl;
+    // テキストも画像もない場合はスキップ
+    if (!hasText && !hasImage) return;
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     let imageUrl: string | undefined = postImageUrl ?? undefined;
+
     if (imageUrl && !imageUrl.startsWith('http')) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -856,19 +861,23 @@ export default function TimelineScreen() {
         if ('url' in result) {
           imageUrl = result.url;
         } else {
-          Alert.alert('エラー', result.error);
+          Alert.alert(language === 'ja' ? '画像エラー' : 'Image Error', result.error);
+          // 画像エラーでもテキストがあれば投稿を続行
           imageUrl = undefined;
+          if (!hasText) return;
         }
       } else {
         imageUrl = undefined;
+        if (!hasText) return;
       }
     }
+
     addTimelinePost(newPostText.trim(), 'general', imageUrl);
     setNewPostText('');
     setPostImageUrl(null);
     setPostImageBase64(null);
     setShowComposer(false);
-  }, [newPostText, addTimelinePost, postImageUrl, postImageBase64]);
+  }, [newPostText, addTimelinePost, postImageUrl, postImageBase64, language]);
 
   const handlePickImage = useCallback(async () => {
     try {
@@ -1180,8 +1189,8 @@ export default function TimelineScreen() {
             </Pressable>
             <Pressable
               onPress={handleNewPost}
-              style={[styles.composerPostBtn, !newPostText.trim() && styles.composerPostBtnDisabled]}
-              disabled={!newPostText.trim()}
+              style={[styles.composerPostBtn, (!newPostText.trim() && !postImageUrl) && styles.composerPostBtnDisabled]}
+              disabled={!newPostText.trim() && !postImageUrl}
             >
               <Text style={styles.composerPostText}>{t('post', language)}</Text>
             </Pressable>
