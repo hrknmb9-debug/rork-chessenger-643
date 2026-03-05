@@ -1,10 +1,98 @@
+/**
+ * Push Notifications - iOS/Android
+ * Apple審査ガイドライン準拠:
+ * - 許可リクエストにサウンド含む
+ * - 全ペイロードに sound を明示（指定なし＝サイレント扱いのため）
+ * - ユーザーが設定で通知音をオフにした場合はOSが尊重（当アプリは何もしない）
+ */
+
 import { Platform } from 'react-native';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { supabase, supabaseNoAuth } from '@/utils/supabaseClient';
 
-// expo-notifications / expo-device は package.json から除外済みのため無効化
+/**
+ * 通知音: 'default' = 標準音（審査安全）。
+ * カスタム音を使う場合:
+ * - app.json plugins.expo-notifications.sounds に ["./assets/sounds/notification.wav"] を追加
+ * - NOTIFICATION_SOUND を "notification.wav" に変更
+ * - iOS: Linear PCM, MA4 (IMA/ADPCM), µLaw, aLaw。30秒以内。メインバンドルに配置。
+ */
+export const NOTIFICATION_SOUND = 'default' as const;
+
+/** アプリ起動時に setNotificationHandler で呼ぶ（フォアグラウンド時も音・バナー表示） */
+export function setupNotificationHandler(): void {
+  if (Platform.OS === 'web') return;
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (e) {
+    console.log('Notifications: setNotificationHandler failed', e);
+  }
+}
+
+/** 通知許可（アラート・サウンド・バッジ）をリクエスト。実機のみ有効 */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  console.log('Notifications: expo-notifications disabled');
-  return null;
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  if (!Device.isDevice) {
+    console.log('Notifications: Not a physical device, skipping');
+    return null;
+  }
+
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        enableVibrate: true,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#8B5CF6',
+      });
+    }
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('Notifications: Permission not granted');
+      return null;
+    }
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      (Constants as { easConfig?: { projectId?: string } }).easConfig?.projectId;
+
+    if (!projectId) {
+      console.log('Notifications: No projectId for Expo push token');
+      return null;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
+    const token = tokenData.data;
+    console.log('Notifications: Push token obtained');
+
+    return token;
+  } catch (error) {
+    console.log('Notifications: Registration failed', error);
+    return null;
+  }
 }
 
 export async function savePushTokenToSupabase(token: string): Promise<void> {
@@ -30,6 +118,7 @@ export async function savePushTokenToSupabase(token: string): Promise<void> {
   }
 }
 
+/** Expo Push API へ送信。全ペイロードに sound を必ず含める（iOS: 指定なし＝サイレント） */
 export async function sendPushNotification(
   expoPushToken: string,
   title: string,
@@ -39,7 +128,7 @@ export async function sendPushNotification(
   try {
     const message = {
       to: expoPushToken,
-      sound: 'default' as const,
+      sound: NOTIFICATION_SOUND,
       title,
       body,
       data: data ?? {},
@@ -56,7 +145,9 @@ export async function sendPushNotification(
     });
 
     const result = await response.json();
-    console.log('Notifications: Push sent', result);
+    if (result.data?.status === 'error') {
+      console.log('Notifications: Push send error', result.data.message);
+    }
   } catch (error) {
     console.log('Notifications: Push send failed', error);
   }
@@ -71,13 +162,11 @@ export async function getOpponentPushToken(opponentId: string): Promise<string |
       .maybeSingle();
 
     if (error || !data?.expo_push_token) {
-      console.log('Notifications: No push token for opponent', opponentId);
       return null;
     }
 
     return data.expo_push_token as string;
-  } catch (e) {
-    console.log('Notifications: Failed to get opponent token', e);
+  } catch {
     return null;
   }
 }

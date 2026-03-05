@@ -3,6 +3,9 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState, useCallback } from "react";
 import { LogBox, Platform, View, StatusBar } from "react-native";
+import { setupNotificationHandler } from "@/utils/notifications";
+
+setupNotificationHandler();
 
 LogBox.ignoreLogs([
   "[SafeImage] onError",

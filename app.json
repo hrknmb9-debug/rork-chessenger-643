@@ -34,11 +34,23 @@
           "origin": "https://rork.com/"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default",
+          "color": "#8B5CF6"
+        }
+      ],
       "expo-font",
       "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "30e8dzkl5ptrsftnsy7by"
+      }
     }
   }
 }
