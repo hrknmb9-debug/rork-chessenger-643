@@ -47,8 +47,8 @@ export default function LoginScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     Animated.sequence([
-      Animated.timing(buttonScale, { toValue: 0.96, duration: 70, useNativeDriver: true }),
-      Animated.timing(buttonScale, { toValue: 1, duration: 70, useNativeDriver: true }),
+      Animated.timing(buttonScale, { toValue: 0.96, duration: 70, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(buttonScale, { toValue: 1, duration: 70, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
 
     setLoading(true);

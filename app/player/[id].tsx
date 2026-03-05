@@ -85,12 +85,12 @@ export default function PlayerDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     Animated.sequence([
-      Animated.timing(buttonAnim, { toValue: 0.92, duration: 100, useNativeDriver: true }),
-      Animated.timing(buttonAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(buttonAnim, { toValue: 0.92, duration: 100, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(buttonAnim, { toValue: 1, duration: 100, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
     sendMatchRequest(player, selectedTime);
     setRequestSent(true);
-    Animated.timing(sentAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    Animated.timing(sentAnim, { toValue: 1, duration: 400, useNativeDriver: Platform.OS !== 'web' }).start();
     Alert.alert(
       t('request_sent_title', language),
       player.name + t('request_sent_desc', language),

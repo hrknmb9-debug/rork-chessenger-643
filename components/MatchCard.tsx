@@ -25,7 +25,7 @@ function MatchCardComponent({ match, onAccept, onDecline, onPress, language = 'j
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
       toValue: 0.97,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       speed: 50,
       bounciness: 4,
     }).start();
@@ -34,7 +34,7 @@ function MatchCardComponent({ match, onAccept, onDecline, onPress, language = 'j
   const handlePressOut = useCallback(() => {
     Animated.spring(scaleAnim, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       speed: 50,
       bounciness: 4,
     }).start();

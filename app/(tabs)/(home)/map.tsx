@@ -78,7 +78,7 @@ export default function MapScreen() {
     setSelectedPlayer(player);
     Animated.spring(slideAnim, {
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       tension: 65,
       friction: 11,
     }).start();
@@ -88,7 +88,7 @@ export default function MapScreen() {
     Animated.timing(slideAnim, {
       toValue: 300,
       duration: 200,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(() => setSelectedPlayer(null));
   }, [slideAnim]);
 

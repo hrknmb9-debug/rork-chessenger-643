@@ -314,9 +314,10 @@ function PostCard({
 
   const handleLike = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const useNative = Platform.OS !== 'web';
     Animated.sequence([
-      Animated.spring(heartScale, { toValue: 1.3, useNativeDriver: true, speed: 50 }),
-      Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, speed: 50 }),
+      Animated.spring(heartScale, { toValue: 1.3, useNativeDriver: useNative, speed: 50 }),
+      Animated.spring(heartScale, { toValue: 1, useNativeDriver: useNative, speed: 50 }),
     ]).start();
     onLike(post.id);
   }, [post.id, onLike, heartScale]);
@@ -757,14 +758,25 @@ export default function TimelineScreen() {
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
 
   const filteredPosts = useMemo(() => {
+    let base: TimelinePost[];
     if (filter === 'my') {
       const uid = currentUserId ?? 'me';
-      return timelinePosts.filter(p => p.author.id === uid).sort((a, b) =>
+      base = timelinePosts.filter(p => p.author.id === uid).sort((a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
+    } else if (filter === 'events') {
+      base = timelinePosts.filter(p => p.type === 'event');
+    } else {
+      base = timelinePosts;
     }
-    if (filter === 'events') return timelinePosts.filter(p => p.type === 'event');
-    return timelinePosts;
+    // 重複 key エラー防止: 同一 id を除外（optimistic update と refresh の競合で重複することがある）
+    const seen = new Set<string>();
+    return base.filter(p => {
+      const id = (p.id?.trim() || `_noid_${seen.size}`);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   }, [filter, timelinePosts, currentUserId]);
 
   const onRefresh = useCallback(async () => {
@@ -970,7 +982,7 @@ export default function TimelineScreen() {
     [toggleLike, handleComment, handleAuthorPress, deleteTimelinePost, currentUserId, language]
   );
 
-  const keyExtractor = useCallback((item: TimelinePost) => item.id, []);
+  const keyExtractor = useCallback((item: TimelinePost, index: number) => item.id?.trim() || `post-${index}`, []);
 
   const ListHeader = useMemo(() => (
     <View style={styles.composerSection}>
