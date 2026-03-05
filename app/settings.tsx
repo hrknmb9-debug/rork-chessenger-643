@@ -109,13 +109,26 @@ export default function SettingsScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      const { data, error } = await supabase.functions.invoke('delete-user');
+                      // アクセストークンを明示的に付与して Edge Function を呼び出す
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (!session?.access_token) {
+                        Alert.alert(t('error', language), t('delete_account_error', language));
+                        return;
+                      }
+                      const { data, error } = await supabase.functions.invoke('delete-user', {
+                        headers: { Authorization: `Bearer ${session.access_token}` },
+                      });
                       if (error) throw error;
                       if (data?.error) throw new Error(data.error);
                       await logout();
                       router.replace('/login' as any);
                     } catch (e) {
-                      Alert.alert(t('error', language), t('delete_account_error', language));
+                      const msg = e instanceof Error ? e.message : String(e);
+                      Alert.alert(
+                        t('error', language),
+                        `${t('delete_account_error', language)}\n\n${msg}`,
+                        [{ text: 'OK' }]
+                      );
                     }
                   },
                 },

@@ -64,7 +64,7 @@ const PROFILE_BIO_ITEM_ID = 'profile-bio';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { profile, language, accessToken, activeMatches } = useChess();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -406,9 +406,6 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        <Pressable onPress={logout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>{t('logout', language)}</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -646,7 +643,5 @@ function createStyles(colors: any) {
       ...(cardShadow ?? {}),
     },
     /* Logout */
-    logoutBtn: { marginTop: 40, paddingVertical: 12, alignItems: 'center' },
-    logoutText: { color: '#F43F5E', fontWeight: '600', fontSize: 15 },
   });
 }

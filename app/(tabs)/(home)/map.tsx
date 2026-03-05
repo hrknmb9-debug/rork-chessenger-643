@@ -62,6 +62,12 @@ export default function MapScreen() {
     return TOKYO_CENTER;
   }, [userLocation]);
 
+  // 実際の座標を持つプレイヤーのみ表示（latitude/longitude が null → (0,0) になるため除外）
+  const mappablePlayers = useMemo(
+    () => players.filter(p => p.coordinates.latitude !== 0 || p.coordinates.longitude !== 0),
+    [players]
+  );
+
   const goToCurrentLocation = useCallback(() => {
     if (!userLocation || !mapRef.current) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -109,7 +115,7 @@ export default function MapScreen() {
             {t('map_mobile_only', language)}
           </Text>
           <View style={styles.playerList}>
-            {players.map(player => (
+            {mappablePlayers.map(player => (
               <Pressable
                 key={player.id}
                 onPress={() => router.push(('/player/' + player.id) as any)}
@@ -151,7 +157,7 @@ export default function MapScreen() {
         showsMyLocationButton={false}
         mapType="standard"
       >
-        {players.map(player => (
+        {mappablePlayers.map(player => (
           <Marker
             key={player.id}
             coordinate={{

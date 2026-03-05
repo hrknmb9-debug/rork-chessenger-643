@@ -56,11 +56,31 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
+    // ── 依存データを順に削除 ──────────────────────────────────────────────
+
+    // メッセージ（送受信問わず自分が絡む room を消す）
     await db.from('messages').delete().eq('sender_id', userId);
+
+    // マッチ（requester / opponent 両方）
+    await db.from('matches').delete().eq('requester_id', userId);
+    await db.from('matches').delete().eq('opponent_id', userId);
+
+    // お気に入り（双方向）
+    await db.from('player_favorites').delete().eq('user_id', userId);
+    await db.from('player_favorites').delete().eq('favorite_player_id', userId);
+
+    // イベント参加
     await db.from('event_participants').delete().eq('user_id', userId);
+
+    // 投稿への いいね / コメント
     await db.from('post_likes').delete().eq('user_id', userId);
     await db.from('comments').delete().eq('user_id', userId);
+
+    // 通知
     await db.from('notifications').delete().eq('user_id', userId);
+    await db.from('notifications').delete().eq('related_user_id', userId);
+
+    // 自分の投稿に紐づくサブリソースを消してから投稿本体を削除
     const { data: userPosts } = await db.from('posts').select('id').eq('user_id', userId);
     if (userPosts?.length) {
       const postIds = userPosts.map((p: { id: string }) => p.id);
@@ -74,8 +94,11 @@ serve(async (req) => {
       }
       await db.from('posts').delete().eq('user_id', userId);
     }
+
+    // プロフィール
     await db.from('profiles').delete().eq('id', userId);
 
+    // ── auth.users から削除 ────────────────────────────────────────────────
     const { error: deleteError } = await supabaseAuth.auth.admin.deleteUser(userId);
     if (deleteError) {
       console.error('delete-user: admin.deleteUser failed', deleteError);
