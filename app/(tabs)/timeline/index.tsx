@@ -75,6 +75,71 @@ const MemoizedAvatar = memo(function MemoizedAvatar({
   return <SafeImage uri={uri} name={name} style={avatarStyle} contentFit="cover" />;
 });
 
+function ReplyItem({
+  reply,
+  language,
+  colors,
+  setTranslationLock,
+  accessToken,
+  surfaceLight,
+}: {
+  reply: { id: string; author: { name: string; avatar: string | null }; content: string };
+  language: string;
+  colors: ThemeColors;
+  setTranslationLock?: (active: boolean) => void;
+  accessToken?: string | null;
+  surfaceLight: string;
+}) {
+  const [translationState, setTranslationState] = useState<{ localTranslatedContent: string | null; loading: boolean }>({ localTranslatedContent: null, loading: false });
+  const originalText = decodeForDisplay(reply.content ?? '');
+  const displayText = translationState.localTranslatedContent ?? originalText;
+
+  const onTranslate = useCallback(async () => {
+    if (translationState.loading || !reply.content?.trim()) return;
+    if (translationState.localTranslatedContent) {
+      setTranslationState({ localTranslatedContent: null, loading: false });
+      setTranslationLock?.(false);
+      return;
+    }
+    setTranslationLock?.(true);
+    setTranslationState(prev => ({ ...prev, loading: true }));
+    try {
+      const result = await translateText(reply.content, getTargetLanguage(language), accessToken ?? undefined);
+      if ('text' in result) {
+        const decoded = decodeForDisplay(result.text);
+        if (decoded.trim()) setTranslationState({ localTranslatedContent: decoded, loading: false });
+      } else if ('error' in result) {
+        Alert.alert(t('error', language), t('translation_failed', language));
+      }
+    } finally {
+      setTranslationState(prev => ({ ...prev, loading: false }));
+      setTranslationLock?.(false);
+    }
+  }, [reply.content, language, translationState.loading, translationState.localTranslatedContent, setTranslationLock, accessToken]);
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 6 }}>
+      <CornerDownRight size={12} color={colors.textMuted} style={{ marginTop: 8 }} />
+      <MemoizedAvatar uri={reply.author.avatar} name={reply.author.name} size={22} backgroundColor={surfaceLight} />
+      <View style={{ flex: 1, backgroundColor: colors.surfaceLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+        <Text style={{ fontSize: 11, fontWeight: '600' as const, color: colors.textPrimary }}>{reply.author.name}</Text>
+        <Text style={{ fontSize: 12, color: colors.textSecondary }}>{displayText}</Text>
+        {translationState.localTranslatedContent != null && translationState.localTranslatedContent.trim() !== originalText.trim() && (
+          <Text style={{ fontSize: 9, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>{t('translated_by_ai', language)}</Text>
+        )}
+        {reply.content?.trim() && (
+          <Pressable onPress={onTranslate} disabled={translationState.loading} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+            {translationState.loading ? <ActivityIndicator size="small" color={colors.textMuted} style={{ transform: [{ scale: 0.6 }] }} /> : null}
+            <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '500' as const }}>
+              {translationState.loading ? t('translating', language) : translationState.localTranslatedContent ? t('original', language) : t('translate', language)}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
 /** チカチカ防止: 投稿画像も翻訳 state と非連動にする（uri 同一なら再レンダースキップ） */
 const MemoizedPostImage = memo(function MemoizedPostImage({
   uri,
@@ -208,14 +273,7 @@ function CommentItem({
       {comment.replies && comment.replies.length > 0 && (
         <View style={{ marginLeft: 36, marginTop: 6, gap: 6 }}>
           {comment.replies.map(reply => (
-            <View key={reply.id} style={{ flexDirection: 'row', gap: 6 }}>
-              <CornerDownRight size={12} color={colors.textMuted} style={{ marginTop: 8 }} />
-              <MemoizedAvatar uri={reply.author.avatar} name={reply.author.name} size={22} backgroundColor={colors.surfaceLight} />
-              <View style={{ flex: 1, backgroundColor: colors.surfaceLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                <Text style={{ fontSize: 11, fontWeight: '600' as const, color: colors.textPrimary }}>{reply.author.name}</Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>{reply.content}</Text>
-              </View>
-            </View>
+            <ReplyItem key={reply.id} reply={reply} language={language} colors={colors} setTranslationLock={setTranslationLock} accessToken={accessToken} surfaceLight={colors.surfaceLight} />
           ))}
         </View>
       )}
@@ -249,6 +307,7 @@ function PostCard({
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [contentTranslationState, setContentTranslationState] = useState<{ localTranslatedContent: string | null; loading: boolean; renderKey?: number; displayReady: boolean }>({ localTranslatedContent: null, loading: false, displayReady: true });
   const [translatedEvent, setTranslatedEvent] = useState<{ title: string | null; location: string | null }>({ title: null, location: null });
+  const [eventTranslationLoading, setEventTranslationLoading] = useState(false);
   const heartScale = useRef(new Animated.Value(1)).current;
   const userId = currentUserId ?? 'me';
   const isLiked = post.likes.includes(userId);
@@ -343,40 +402,36 @@ function PostCard({
   }, [contentText, language, post.id, contentTranslationState.localTranslatedContent, contentTranslationState.loading, setTranslationLock, accessToken]);
 
   const targetLang = getTargetLanguage(language);
+  const displayEventTitle = translatedEvent.title ?? post.event?.title ?? '';
+  const displayEventLocation = translatedEvent.location ?? post.event?.location ?? '';
+
   useEffect(() => {
-    if (!post.event) {
+    if (!post.event) setTranslatedEvent({ title: null, location: null });
+  }, [post.event?.id]);
+
+  const handleTranslateEvent = useCallback(async () => {
+    if (!post.event || eventTranslationLoading) return;
+    if (translatedEvent.title !== null || translatedEvent.location !== null) {
       setTranslatedEvent({ title: null, location: null });
       return;
     }
-    setTranslatedEvent({ title: null, location: null });
-    let cancelled = false;
-    const run = async () => {
-      // チカチカ防止: 初回ペイント完了後に翻訳開始（連続 setState による画像再描画を軽減）
-      await new Promise(r => setTimeout(r, 50));
-      if (cancelled) return;
-      const token = accessToken ?? undefined;
-      let newTitle: string | null = null;
-      let newLocation: string | null = null;
+    setEventTranslationLoading(true);
+    let newTitle: string | null = null;
+    let newLocation: string | null = null;
+    try {
       if (post.event?.title?.trim()) {
-        const r = await translateText(post.event.title, targetLang, token);
-        if (!cancelled && 'text' in r) newTitle = decodeForDisplay(r.text);
+        const r = await translateText(post.event.title, targetLang, accessToken ?? undefined);
+        if ('text' in r) newTitle = decodeForDisplay(r.text);
       }
       if (post.event?.location?.trim()) {
-        const r = await translateText(post.event.location, targetLang, token);
-        if (!cancelled && 'text' in r) newLocation = decodeForDisplay(r.text);
+        const r = await translateText(post.event.location, targetLang, accessToken ?? undefined);
+        if ('text' in r) newLocation = decodeForDisplay(r.text);
       }
-      if (cancelled) return;
-      // 1回の setState にまとめて再レンダーを削減（画像チカチカ回避）
-      const apply = () => setTranslatedEvent({ title: newTitle, location: newLocation });
-      if (Platform.OS === 'ios') InteractionManager.runAfterInteractions(() => setTimeout(apply, 0));
-      else apply();
-    };
-    run();
-    return () => { cancelled = true; };
-  }, [post.event?.id, post.event?.title, post.event?.location, targetLang, accessToken]);
-
-  const displayEventTitle = translatedEvent.title ?? post.event?.title ?? '';
-  const displayEventLocation = translatedEvent.location ?? post.event?.location ?? '';
+    } finally {
+      setTranslatedEvent({ title: newTitle, location: newLocation });
+      setEventTranslationLoading(false);
+    }
+  }, [post.event, targetLang, accessToken, eventTranslationLoading, translatedEvent.title, translatedEvent.location]);
 
   const getTypeIcon = () => {
     switch (post.type) {
@@ -481,7 +536,23 @@ function PostCard({
       {/* イベント投稿の場合: イベントカードをコンテンツより先に表示（詳細を強調） */}
       {post.event && (
         <View style={{ backgroundColor: colors.greenMuted, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.green + '33', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
-          <Text key={`ev-title-${post.id}`} style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, marginBottom: 8, textAlign: isRTL(language) ? 'right' : 'left' }}>{displayEventTitle}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+            <Text key={`ev-title-${post.id}`} style={{ fontSize: 16, fontWeight: '700' as const, color: colors.textPrimary, flex: 1, textAlign: isRTL(language) ? 'right' : 'left' }}>{displayEventTitle}</Text>
+            <Pressable
+              onPress={handleTranslateEvent}
+              disabled={eventTranslationLoading}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: eventTranslationLoading ? colors.surface : 'transparent' }}
+            >
+              {eventTranslationLoading ? (
+                <ActivityIndicator size="small" color={colors.green} />
+              ) : (
+                <Languages size={14} color={(translatedEvent.title ?? translatedEvent.location) ? colors.green : colors.textMuted} />
+              )}
+              <Text style={{ fontSize: 11, fontWeight: '600' as const, color: (translatedEvent.title ?? translatedEvent.location) ? colors.green : colors.textMuted }}>
+                {eventTranslationLoading ? t('translating', language) : (translatedEvent.title ?? translatedEvent.location) ? t('original', language) : t('translate', language)}
+              </Text>
+            </Pressable>
+          </View>
           <View style={{ gap: 4, marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Calendar size={13} color={colors.green} />

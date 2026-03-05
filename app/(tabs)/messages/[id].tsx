@@ -403,7 +403,7 @@ function MessageBubble({
         </Pressable>
 
         {/* Translate button - for text messages from others */}
-        {hasTranslatableText && !isMe && isLast && (
+        {hasTranslatableText && !isMe && (
           <Pressable onPress={handleTranslate} disabled={translationState.loading} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginLeft: 4, paddingVertical: 2 }}>
             {translationState.loading ? (
               <ActivityIndicator size="small" color={colors.gold} style={{ transform: [{ scale: 0.8 }] }} />
