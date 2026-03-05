@@ -1814,15 +1814,27 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       })
     );
 
+    // コメント INSERT（失敗しても通知フローは継続する）
+    let commentSaved = false;
     try {
-      await supabase.from('comments').insert({
+      const { error: commentError } = await supabase.from('comments').insert({
         post_id: postId,
         user_id: userId,
         content,
         parent_id: parentId ?? null,
       });
-      console.log('Comment synced to Supabase');
+      if (commentError) {
+        console.warn('Comment insert error:', commentError.message, commentError.code);
+      } else {
+        commentSaved = true;
+        console.log('Comment synced to Supabase');
+      }
+    } catch (e) {
+      console.warn('Comment sync failed:', e);
+    }
 
+    // 通知・プッシュ（コメント保存の成否に関わらず試みる: 楽観的 UI と整合させる）
+    try {
       const actorName = profile?.name ?? 'Someone';
       const { data: postRow } = await supabase.from('posts').select('user_id').eq('id', postId).single();
       const postOwnerId = postRow?.user_id;
@@ -1835,7 +1847,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             type: 'post_reply',
             content: `${actorName}が返信しました`,
             related_id: postId,
-          });
+          }).then(({ error }) => { if (error) console.warn('post_reply notification insert error:', error.message); });
           notifyTimelineComment(postOwnerId, actorName, true).catch(() => {});
         }
         const { data: parentRow } = await supabase.from('comments').select('user_id').eq('id', parentId).single();
@@ -1846,26 +1858,29 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             type: 'post_reply',
             content: `${actorName}が返信しました`,
             related_id: postId,
-          });
+          }).then(({ error }) => { if (error) console.warn('post_reply(parent) notification insert error:', error.message); });
           notifyTimelineComment(parentAuthorId, actorName, true).catch(() => {});
         }
       } else {
         // 直コメント: 投稿者に通知（自分以外）
         if (postOwnerId && postOwnerId !== userId) {
-          await supabase.from('notifications').insert({
+          const { error: notifError } = await supabase.from('notifications').insert({
             user_id: postOwnerId,
             type: 'post_comment',
             content: `${actorName}がコメントしました`,
             related_id: postId,
           });
+          if (notifError) {
+            console.warn('post_comment notification insert error:', notifError.message, notifError.code);
+          }
           notifyTimelineComment(postOwnerId, actorName, false).catch(() => {});
         }
       }
     } catch (e) {
-      console.log('Comment sync failed', e);
+      console.warn('Notification send failed:', e);
     }
 
-    console.log('Comment added to post', postId);
+    console.log('Comment added to post', postId, '| saved to DB:', commentSaved);
   }, [profile, currentUserId]);
 
   const blockUser = useCallback(async (userId: string) => {
@@ -2036,7 +2051,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   );
 
   const addTimelinePost = useCallback(async (content: string, type: TimelinePost['type'] = 'general', imageUrl?: string, templateType?: string, event?: TimelineEvent) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    // getSession() はローカルキャッシュから取得するため getUser() より確実
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) {
       console.log('addTimelinePost: No authenticated user');
       return;

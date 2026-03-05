@@ -5,6 +5,23 @@ const LOG_TAG = '[MessageImageUpload]';
 const MESSAGE_IMAGES_BUCKET = 'message-images';
 
 /**
+ * Supabase が要求する共通ヘッダーを生成する。
+ * - Authorization: JWT ベアラートークン（RLS の auth.uid() / auth.jwt() に使用される）
+ * - apikey: anon key（Supabase ゲートウェイがプロジェクト識別に必須。欠落すると 400/401 になる）
+ * - Content-Type: 画像 MIME タイプ
+ * - x-upsert: 重複アップロード拒否
+ */
+function buildStorageHeaders(token: string, contentType: string): Record<string, string> {
+  const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+  return {
+    Authorization: `Bearer ${token}`,
+    apikey: anonKey,
+    'Content-Type': contentType,
+    'x-upsert': 'false',
+  };
+}
+
+/**
  * iOS ネイティブアップローダー: expo-file-system の uploadAsync を使用。
  * React Native の fetch + ArrayBuffer はブリッジ経由のため iOS で不安定になる場合がある。
  * uploadAsync は iOS/Android のネイティブ HTTP スタックを直接使うため確実に動作する。
@@ -34,11 +51,7 @@ async function uploadViaFileSystem(
   const result = await FileSystem.uploadAsync(uploadUrl, fileUri, {
     httpMethod: 'POST',
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': contentType,
-      'x-upsert': 'false',
-    },
+    headers: buildStorageHeaders(token, contentType),
   });
 
   return { ok: result.status >= 200 && result.status < 300, status: result.status, body: result.body };
@@ -144,7 +157,7 @@ export async function uploadMessageImage(
   try {
     const response = await fetch(uploadUrl, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'x-upsert': 'false' },
+      headers: buildStorageHeaders(token, contentType),
       body: arrayBuffer,
     });
     if (!response.ok) {
@@ -215,7 +228,7 @@ export async function uploadTimelineImage(
   try {
     const response = await fetch(uploadUrl, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'x-upsert': 'false' },
+      headers: buildStorageHeaders(token, contentType),
       body: arrayBuffer,
     });
     if (!response.ok) {
