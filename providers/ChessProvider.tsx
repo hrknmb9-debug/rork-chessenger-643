@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Match, MatchStatus, MatchRating, Player, UserProfile, TimelinePost, TimelineComment, TimelineEvent, MatchResultReport, AppNotification, SkillLevel, PlayStyle } from '@/types';
@@ -892,6 +892,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   useEffect(() => {
     const updateLastSeen = async () => {
       if (!currentUserId || currentUserId === 'me') return;
+      if (AppState.currentState !== 'active') return;
       try {
         await supabaseNoAuth.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUserId);
       } catch (e) {
@@ -899,9 +900,33 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       }
     };
 
-    lastSeenInterval.current = setInterval(updateLastSeen, 5 * 60 * 1000);
-    return () => {
+    const startInterval = () => {
       if (lastSeenInterval.current) clearInterval(lastSeenInterval.current);
+      lastSeenInterval.current = setInterval(updateLastSeen, 5 * 60 * 1000);
+    };
+    const stopInterval = async () => {
+      if (lastSeenInterval.current) {
+        clearInterval(lastSeenInterval.current);
+        lastSeenInterval.current = null;
+      }
+      if (currentUserId && currentUserId !== 'me') {
+        try {
+          const offlineAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+          await supabaseNoAuth.from('profiles').update({ last_seen: offlineAt }).eq('id', currentUserId);
+        } catch (e) {
+          console.log('ChessProvider: last_seen offline update failed', e);
+        }
+      }
+    };
+
+    if (AppState.currentState === 'active') startInterval();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') startInterval();
+      else stopInterval();
+    });
+    return () => {
+      sub.remove();
+      stopInterval();
     };
   }, [currentUserId]);
 
