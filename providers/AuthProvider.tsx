@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -7,7 +8,10 @@ import { AuthUser } from '@/types';
 import { registerForPushNotificationsAsync, savePushTokenToSupabase } from '@/utils/notifications';
 
 const AUTH_KEY = 'chess_auth_user';
-const ALL_STORAGE_KEYS = ['chess_auth_user', 'chess_theme_mode', 'chess_language'];
+const SESSION_STARTED_KEY = 'chess_session_started_at';
+const SESSION_TIMEOUT_HOURS = 8;
+const SESSION_TIMEOUT_MS = SESSION_TIMEOUT_HOURS * 60 * 60 * 1000;
+const ALL_STORAGE_KEYS = ['chess_auth_user', 'chess_theme_mode', 'chess_language', SESSION_STARTED_KEY];
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -82,11 +86,42 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   }, []);
 
+  const checkSessionTimeout = useCallback(async (): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return false;
+      const started = await AsyncStorage.getItem(SESSION_STARTED_KEY);
+      if (!started) {
+        await AsyncStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
+        return false;
+      }
+      const elapsed = Date.now() - parseInt(started, 10);
+      if (elapsed > SESSION_TIMEOUT_MS) {
+        console.log('Auth: Session timeout after', Math.round(elapsed / 3600000), 'hours, signing out');
+        await supabase.auth.signOut({ scope: 'local' });
+        await AsyncStorage.multiRemove(ALL_STORAGE_KEYS);
+        setUser(null);
+        if (initialLoadDone.current) {
+          try { router.replace('/login' as any); } catch (e) { console.log('Auth: Nav to login failed', e); }
+        }
+        return true;
+      }
+    } catch (e) {
+      console.log('Auth: checkSessionTimeout error (non-blocking)', e);
+    }
+    return false;
+  }, [router]);
+
   useEffect(() => {
     const loadUser = async () => {
       try {
         console.log('Auth: Checking existing session...');
         await clearStaleSession();
+        const expired = await checkSessionTimeout();
+        if (expired) {
+          setIsLoading(false);
+          return;
+        }
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         console.log('AUTH_SESSION_CHECK:', sessionError ? sessionError.message : 'no error', 'hasSession:', !!session);
         if (session?.user) {
@@ -147,6 +182,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('Auth: State changed', event, session?.user?.id);
 
       if (event === 'SIGNED_IN' && session?.user) {
+        await AsyncStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
         const defaultAvatar = 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face';
         const authUser = await loadProfileFromSupabase(
           session.user.id,
@@ -193,7 +229,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [loadProfileFromSupabase]);
+  }, [loadProfileFromSupabase, checkSessionTimeout]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkSessionTimeout();
+    });
+    return () => sub.remove();
+  }, [checkSessionTimeout]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
@@ -224,6 +267,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         // Native: AsyncStorage に書き込み
         try {
           await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
+          await AsyncStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
           console.log('Auth: AsyncStorage write OK');
         } catch (storageErr) {
           console.log('Auth: AsyncStorage write FAILED', storageErr);
@@ -314,6 +358,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           isLoggedIn: true,
         };
         await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
+        await AsyncStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
         setUser(authUser);
 
         if (data.session) {
