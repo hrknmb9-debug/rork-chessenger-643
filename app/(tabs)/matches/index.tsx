@@ -134,7 +134,10 @@ function useDiscoverProfiles(currentUserId: string | undefined) {
         .neq('id', currentUserId)
         .limit(30);
 
-      if (err) throw err;
+      if (err) {
+        console.warn('[Matches] profiles_with_match_stats error:', err.message, 'code:', err.code);
+        throw err;
+      }
 
       const shuffled: DiscoverProfile[] = (data ?? [])
         .map((r: any) => ({

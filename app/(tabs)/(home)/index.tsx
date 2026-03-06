@@ -259,7 +259,7 @@ export default function HomeScreen() {
     }
     const { data, error } = await query;
     if (error) {
-      console.log('fetchPlayers error:', error.message);
+      console.warn('[Home] profiles_with_match_stats error:', error.message, 'code:', error.code, 'details:', error.details);
       return;
     }
     if (data) {

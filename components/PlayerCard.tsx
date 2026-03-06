@@ -127,7 +127,7 @@ function PlayerCardComponent({ player, onPress, language = 'ja' }: PlayerCardPro
           </View>
           <View style={styles.footerItem}>
             <Swords size={13} color={colors.textMuted} />
-            <Text style={styles.footerText}>{player.gamesPlayed} {t('tab_matches', language)}</Text>
+            <Text style={styles.footerText}>{player.gamesPlayed ?? 0} {t('tab_matches', language)}</Text>
           </View>
         </View>
       </Pressable>

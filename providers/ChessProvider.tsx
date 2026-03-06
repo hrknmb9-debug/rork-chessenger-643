@@ -376,8 +376,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         profileCacheRef.current.set(userId, player);
         return player;
       }
+      if (error) {
+        console.warn('[ChessProvider] fetchPlayerProfile profiles_with_match_stats failed:', userId, error.message, 'code:', error.code);
+      }
     } catch (e) {
-      console.log('ChessProvider: fetchPlayerProfile failed for', userId, e);
+      console.warn('ChessProvider: fetchPlayerProfile failed for', userId, e);
     }
     return null;
   }, [userLocation]);
@@ -431,10 +434,13 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     const batchSize = 20;
     for (let i = 0; i < allAuthorIds.length; i += batchSize) {
       const batch = allAuthorIds.slice(i, i + batchSize);
-      const { data: profiles } = await supabaseNoAuth
+      const { data: profiles, error: profErr } = await supabaseNoAuth
         .from('profiles_with_match_stats')
         .select('*')
         .in('id', batch);
+      if (profErr) {
+        console.warn('[ChessProvider] buildTimelinePosts profiles_with_match_stats error:', profErr.message, 'batch:', batch.length);
+      }
       if (profiles) {
         profiles.forEach((p: SupabaseProfile) => {
           const player = supabaseProfileToPlayer(p, userLocation?.latitude, userLocation?.longitude);
@@ -684,6 +690,9 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         }
         const { data: nearbyProfiles, error: nearbyError } = await profilesQuery;
 
+        if (nearbyError) {
+          console.warn('[ChessProvider] loadSupabaseData profiles_with_match_stats failed:', nearbyError.message, 'code:', nearbyError.code);
+        }
         if (nearbyProfiles && !nearbyError && nearbyProfiles.length > 0) {
           const userLat = userLocation?.latitude;
           const userLon = userLocation?.longitude;
@@ -1673,7 +1682,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       const myRating = profile.rating || 1200;
 
       const { data: opponentProfile } = await supabaseNoAuth
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select('rating, games_played, wins, losses, draws')
         .eq('id', opponentId)
         .maybeSingle();

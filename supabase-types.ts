@@ -630,7 +630,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      profiles_with_match_stats: {
+        Row: {
+          id: string
+          name: string | null
+          email: string | null
+          avatar: string | null
+          bio: string | null
+          bio_en: string | null
+          rating: number | null
+          chess_com_rating: number | null
+          lichess_rating: number | null
+          skill_level: string | null
+          preferred_time_control: string | null
+          location: string | null
+          latitude: number | null
+          longitude: number | null
+          languages: string[] | null
+          country: string | null
+          play_styles: string[] | null
+          is_online: boolean | null
+          last_active: string | null
+          last_seen: string | null
+          expo_push_token: string | null
+          created_at: string | null
+          games_played: number
+          wins: number
+          losses: number
+          draws: number
+        }
+      }
     }
     Functions: {
       [_ in never]: never
