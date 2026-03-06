@@ -80,23 +80,24 @@ export default function PlayerDetailScreen() {
   const sentAnim = useRef(new Animated.Value(0)).current;
 
   const playerFromList = useMemo(() => players.find(p => p.id === id), [players, id]);
-  const player = playerFromList ?? fetchedPlayer;
+  // 常に最新取得を優先（キャッシュ干渉を避け、マッチ数を確実に表示）
+  const player = fetchedPlayer ?? playerFromList;
 
-  // リストにない場合（ディープリンク等）は fetchPlayerProfile で取得（マッチ数含む完全なプロフィール）
+  // 常に bypassCache で最新プロフィールを取得（リストにいてもマッチ数が古い可能性があるため）
   useEffect(() => {
-    if (!id || playerFromList) {
+    if (!id) {
       setFetchedPlayer(null);
       return;
     }
     let mounted = true;
     setFetchingPlayer(true);
-    fetchPlayerProfile(id)
+    fetchPlayerProfile(id, { bypassCache: true })
       .then((p) => {
         if (mounted && p) setFetchedPlayer(p);
       })
       .finally(() => { if (mounted) setFetchingPlayer(false); });
     return () => { mounted = false; };
-  }, [id, playerFromList, fetchPlayerProfile]);
+  }, [id, fetchPlayerProfile]);
   const playerBlocked = useMemo(() => (id ? isUserBlocked(id) : false), [id, isUserBlocked]);
   const isFavorite = useMemo(() => (id ? favoritePlayerIds.has(id) : false), [id, favoritePlayerIds]);
 

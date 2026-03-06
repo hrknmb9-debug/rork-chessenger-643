@@ -355,9 +355,14 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     loadEventCache();
   }, []);
 
-  const fetchPlayerProfile = useCallback(async (userId: string): Promise<Player | null> => {
-    const cached = profileCacheRef.current.get(userId);
-    if (cached) return cached;
+  const fetchPlayerProfile = useCallback(async (
+    userId: string,
+    options?: { bypassCache?: boolean }
+  ): Promise<Player | null> => {
+    if (!options?.bypassCache) {
+      const cached = profileCacheRef.current.get(userId);
+      if (cached) return cached;
+    }
 
     try {
       const { data, error } = await supabaseNoAuth
@@ -686,6 +691,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
             supabaseProfileToPlayer(p, userLat, userLon)
           );
           setSupabasePlayers(converted);
+          converted.forEach((p) => profileCacheRef.current.set(p.id, p));
           console.log('ChessProvider: Loaded', converted.length, 'players from Supabase');
 
           const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -1312,6 +1318,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           supabaseProfileToPlayer(p, userLat, userLon)
         );
         setSupabasePlayers(converted);
+        converted.forEach((p) => profileCacheRef.current.set(p.id, p));
 
         const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
         const activeCount = nearbyProfiles.filter((p: SupabaseProfile) =>
