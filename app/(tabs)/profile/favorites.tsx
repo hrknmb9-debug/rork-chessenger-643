@@ -23,7 +23,8 @@ export default function FavoritesScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { favoritePlayers, refreshFavorites, toggleFavorite, language, currentUserId } = useChess();
   const { user } = useAuth();
-  const canShowFavorites = !!(user?.id ?? currentUserId);
+  // ログイン中 or キャッシュにお気に入りがあれば表示（ログアウト後もお気に入りページに残す）
+  const canShowFavorites = !!(user?.id ?? currentUserId) || favoritePlayers.length > 0;
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
 

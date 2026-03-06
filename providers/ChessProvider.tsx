@@ -242,6 +242,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const lastSeenInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const profileCacheRef = useRef<Map<string, Player>>(new Map());
   const eventCacheRef = useRef<Map<string, TimelineEvent>>(new Map());
+  const favoritePlayersRef = useRef<Player[]>([]);
   const refreshTimelineRef = useRef<() => Promise<void>>(null);
   const translationLockRef = useRef<boolean>(false);
   const realtimeErrorLogLast = useRef<Record<string, number>>({});
@@ -264,6 +265,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         setCurrentUserId(session.user.id);
         setAuthReady(prev => !prev);
       } else if (event === 'SIGNED_OUT') {
+        // ログアウト直前にキャッシュへ保存（お気に入りを永続化）
+        const toSave = favoritePlayersRef.current;
+        if (toSave.length > 0) {
+          AsyncStorage.setItem(FAVORITES_CACHE_KEY, JSON.stringify(toSave)).catch(() => {});
+        }
         setCurrentUserId(null);
         setAccessToken(null);
         setProfile(defaultProfile);
@@ -281,6 +287,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     });
     return () => { subscription.unsubscribe(); };
   }, []);
+
+  // favoritePlayersRef を常に最新に同期（SIGNED_OUT 時のキャッシュ保存で使用）
+  useEffect(() => {
+    favoritePlayersRef.current = favoritePlayers;
+  }, [favoritePlayers]);
 
   const supportedCodes = useMemo(() => new Set(SUPPORTED_LANGUAGES.map(l => l.code)), []);
   useEffect(() => {
@@ -302,6 +313,27 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     };
     loadLang();
   }, [supportedCodes]);
+
+  // アプリ起動時: ログアウト状態のときのみキャッシュから復元（ログイン中は refreshFavorites で API 取得）
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) return; // ログイン中は API から取得するためスキップ
+        const cached = await AsyncStorage.getItem(FAVORITES_CACHE_KEY);
+        if (!cached || !mounted) return;
+        const list = JSON.parse(cached) as Player[];
+        if (Array.isArray(list) && list.length > 0 && mounted) {
+          setFavoritePlayers(list);
+          setFavoritePlayerIds(new Set(list.map((p) => p.id)));
+          favoritePlayersRef.current = list;
+          if (__DEV__) console.log('ChessProvider: Loaded favorites from cache on init', list.length);
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const loadEventCache = async () => {
@@ -2466,7 +2498,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       .catch(() => refreshFavorites());
   }, [currentUserId, refreshFavorites]);
 
-  // favorites 変更のたびにキャッシュへ保存（toggleFavorite や復元後も即時永続化、空でも保存）
+  // favorites 変更のたびにキャッシュへ保存（ログイン中は常時、ログアウト時は SIGNED_OUT で保存）
   useEffect(() => {
     if (currentUserId && currentUserId !== 'me') {
       AsyncStorage.setItem(FAVORITES_CACHE_KEY, JSON.stringify(favoritePlayers)).catch(() => {});
