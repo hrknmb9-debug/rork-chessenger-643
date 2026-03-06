@@ -253,7 +253,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchPlayers = useCallback(async () => {
-    let query = supabase.from('profiles').select('*');
+    let query = supabase.from('profiles_with_match_stats').select('*');
     if (currentUserId) {
       query = query.neq('id', currentUserId);
     }

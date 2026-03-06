@@ -127,7 +127,7 @@ function useDiscoverProfiles(currentUserId: string | undefined) {
     setError(null);
     try {
       const { data, error: err } = await supabase
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select(
           'id, name, avatar, location, country, skill_level, rating, chess_com_rating, play_styles, preferred_time_control, bio, games_played, wins, losses, draws'
         )

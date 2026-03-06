@@ -366,7 +366,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
     try {
       const { data, error } = await supabaseNoAuth
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
@@ -432,7 +432,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     for (let i = 0; i < allAuthorIds.length; i += batchSize) {
       const batch = allAuthorIds.slice(i, i + batchSize);
       const { data: profiles } = await supabaseNoAuth
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select('*')
         .in('id', batch);
       if (profiles) {
@@ -634,7 +634,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           await supabaseNoAuth.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', userId);
 
           const { data: profileData, error: profileError } = await supabaseNoAuth
-            .from('profiles')
+            .from('profiles_with_match_stats')
             .select('*')
             .eq('id', userId)
             .maybeSingle();
@@ -678,7 +678,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
           }
         }
 
-        let profilesQuery = supabaseNoAuth.from('profiles').select('*');
+        let profilesQuery = supabaseNoAuth.from('profiles_with_match_stats').select('*');
         if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
           profilesQuery = profilesQuery.neq('id', userId);
         }
@@ -886,7 +886,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       if (!user) return;
 
       const { data: profileData, error } = await supabaseNoAuth
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
@@ -1307,7 +1307,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       if (!user) return;
 
       const { data: nearbyProfiles, error } = await supabaseNoAuth
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select('*')
         .neq('id', user.id);
 
@@ -2477,7 +2477,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         return;
       }
       const { data: profiles } = await supabase
-        .from('profiles')
+        .from('profiles_with_match_stats')
         .select('*')
         .in('id', [...ids]);
       const userLat = userLocation?.latitude;
