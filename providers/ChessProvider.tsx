@@ -19,6 +19,7 @@ import { playMessageNotificationSound } from '@/utils/messageNotificationSound';
 
 const LANGUAGE_KEY = 'chess_language';
 const EVENT_CACHE_KEY = 'chess_event_cache';
+const FAVORITES_CACHE_PREFIX = 'chess_favorites_';
 
 interface SupabaseProfile {
   id: string;
@@ -244,6 +245,13 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const refreshTimelineRef = useRef<() => Promise<void>>(null);
   const translationLockRef = useRef<boolean>(false);
   const realtimeErrorLogLast = useRef<Record<string, number>>({});
+  const currentUserIdRef = useRef<string | null>(null);
+  const favoritesRef = useRef<{ ids: Set<string>; players: Player[] }>({ ids: new Set(), players: [] });
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+    favoritesRef.current = { ids: favoritePlayerIds, players: favoritePlayers };
+  }, [currentUserId, favoritePlayerIds, favoritePlayers]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -263,6 +271,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         setCurrentUserId(session.user.id);
         setAuthReady(prev => !prev);
       } else if (event === 'SIGNED_OUT') {
+        const uid = currentUserIdRef.current;
+        const { ids, players } = favoritesRef.current;
+        if (uid && (ids.size > 0 || players.length > 0)) {
+          AsyncStorage.setItem(FAVORITES_CACHE_PREFIX + uid, JSON.stringify({ ids: [...ids], players })).catch(() => {});
+        }
         setCurrentUserId(null);
         setAccessToken(null);
         setProfile(defaultProfile);
@@ -2387,8 +2400,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
   const refreshFavorites = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      setFavoritePlayerIds(new Set());
-      setFavoritePlayers([]);
+      // トークン無効時はクリアしない（キャッシュ復元を保持）
       return;
     }
     try {
@@ -2404,6 +2416,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       setFavoritePlayerIds(ids);
       if (ids.size === 0) {
         setFavoritePlayers([]);
+        AsyncStorage.setItem(FAVORITES_CACHE_PREFIX + user.id, JSON.stringify({ ids: [], players: [] })).catch(() => {});
         return;
       }
       const { data: profiles } = await supabase
@@ -2414,14 +2427,34 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       const userLon = userLocation?.longitude;
       const list = (profiles ?? []).map((p: SupabaseProfile) => supabaseProfileToPlayer(p, userLat, userLon));
       setFavoritePlayers(list);
+      AsyncStorage.setItem(FAVORITES_CACHE_PREFIX + user.id, JSON.stringify({ ids: [...ids], players: list })).catch(() => {});
     } catch (e) {
       console.log('ChessProvider: refreshFavorites failed', e);
     }
   }, [userLocation?.latitude, userLocation?.longitude]);
 
-  // 再ログイン時に favorites を復元（SIGNED_OUT でクリアされるため）
+  // favorites 変更時に即時永続化（Refresh Token エラーで SIGNED_OUT しても復元可能に）
   useEffect(() => {
-    if (currentUserId && currentUserId !== 'me') refreshFavorites();
+    if (!currentUserId || currentUserId === 'me') return;
+    AsyncStorage.setItem(FAVORITES_CACHE_PREFIX + currentUserId, JSON.stringify({ ids: [...favoritePlayerIds], players: favoritePlayers })).catch(() => {});
+  }, [currentUserId, favoritePlayerIds, favoritePlayers]);
+
+  // 再ログイン時に favorites を復元（SIGNED_OUT でクリアされるため）。キャッシュから即時復元し、DB から再取得
+  useEffect(() => {
+    if (!currentUserId || currentUserId === 'me') return;
+    const key = FAVORITES_CACHE_PREFIX + currentUserId;
+    AsyncStorage.getItem(key).then((stored) => {
+      if (stored) {
+        try {
+          const { ids, players } = JSON.parse(stored) as { ids: string[]; players: Player[] };
+          if (ids?.length > 0 || (players?.length ?? 0) > 0) {
+            setFavoritePlayerIds(new Set(ids ?? []));
+            setFavoritePlayers(players ?? []);
+          }
+        } catch { /* ignore */ }
+      }
+      refreshFavorites();
+    }).catch(() => refreshFavorites());
   }, [currentUserId, refreshFavorites]);
 
   const toggleFavorite = useCallback(async (playerId: string) => {
