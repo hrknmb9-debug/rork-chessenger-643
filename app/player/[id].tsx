@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   InteractionManager,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -65,18 +66,37 @@ export default function PlayerDetailScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { players, sendMatchRequest, language, blockUser, unblockUser, isUserBlocked, currentUserId, accessToken, toggleFavorite, favoritePlayerIds } = useChess();
+  const { players, sendMatchRequest, language, blockUser, unblockUser, isUserBlocked, currentUserId, accessToken, toggleFavorite, favoritePlayerIds, fetchPlayerProfile } = useChess();
   const { userLocation } = useLocation();
   const router = useRouter();
   const [selectedTime, setSelectedTime] = useState('15+10');
   const [showTimeSelector, setShowTimeSelector] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
   const [bioApiState, setBioApiState] = useState<{ loading: boolean; translated: string | null }>({ loading: false, translated: null });
+  const [fetchedPlayer, setFetchedPlayer] = useState<import('@/types').Player | null>(null);
+  const [fetchingPlayer, setFetchingPlayer] = useState(false);
 
   const buttonAnim = useRef(new Animated.Value(1)).current;
   const sentAnim = useRef(new Animated.Value(0)).current;
 
-  const player = useMemo(() => players.find(p => p.id === id), [players, id]);
+  const playerFromList = useMemo(() => players.find(p => p.id === id), [players, id]);
+  const player = playerFromList ?? fetchedPlayer;
+
+  // リストにない場合（ディープリンク等）は fetchPlayerProfile で取得（マッチ数含む完全なプロフィール）
+  useEffect(() => {
+    if (!id || playerFromList) {
+      setFetchedPlayer(null);
+      return;
+    }
+    let mounted = true;
+    setFetchingPlayer(true);
+    fetchPlayerProfile(id)
+      .then((p) => {
+        if (mounted && p) setFetchedPlayer(p);
+      })
+      .finally(() => { if (mounted) setFetchingPlayer(false); });
+    return () => { mounted = false; };
+  }, [id, playerFromList, fetchPlayerProfile]);
   const playerBlocked = useMemo(() => (id ? isUserBlocked(id) : false), [id, isUserBlocked]);
   const isFavorite = useMemo(() => (id ? favoritePlayerIds.has(id) : false), [id, favoritePlayerIds]);
 
@@ -191,7 +211,11 @@ export default function PlayerDetailScreen() {
             headerLeft: () => <BackNavButton onPress={() => router.back()} />,
           }}
         />
-        <Text style={styles.errorText}>{t('player_not_found', language)}</Text>
+        {fetchingPlayer ? (
+          <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 24 }} />
+        ) : (
+          <Text style={styles.errorText}>{t('player_not_found', language)}</Text>
+        )}
       </View>
     );
   }

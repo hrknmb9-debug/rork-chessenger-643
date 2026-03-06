@@ -54,6 +54,10 @@ interface DiscoverProfile {
   playStyles: string[];
   preferredTimeControl: string | null;
   bio: string | null;
+  games_played?: number | null;
+  wins?: number | null;
+  losses?: number | null;
+  draws?: number | null;
 }
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
@@ -92,10 +96,10 @@ function discoverProfileToPlayer(p: DiscoverProfile): Player {
     chessComRating: p.chessComRating ?? null,
     lichessRating: null,
     skillLevel: (p.skillLevel as Player['skillLevel']) ?? 'intermediate',
-    gamesPlayed: 0,
-    wins: 0,
-    losses: 0,
-    draws: 0,
+    gamesPlayed: p.games_played ?? 0,
+    wins: p.wins ?? 0,
+    losses: p.losses ?? 0,
+    draws: p.draws ?? 0,
     distance: 0,
     isOnline: false,
     lastActive: '',
@@ -125,7 +129,7 @@ function useDiscoverProfiles(currentUserId: string | undefined) {
       const { data, error: err } = await supabase
         .from('profiles')
         .select(
-          'id, name, avatar, location, country, skill_level, rating, chess_com_rating, play_styles, preferred_time_control, bio'
+          'id, name, avatar, location, country, skill_level, rating, chess_com_rating, play_styles, preferred_time_control, bio, games_played, wins, losses, draws'
         )
         .neq('id', currentUserId)
         .limit(30);
@@ -145,6 +149,10 @@ function useDiscoverProfiles(currentUserId: string | undefined) {
           playStyles: Array.isArray(r.play_styles) ? r.play_styles : [],
           preferredTimeControl: r.preferred_time_control ?? null,
           bio: r.bio ?? null,
+          games_played: r.games_played ?? null,
+          wins: r.wins ?? null,
+          losses: r.losses ?? null,
+          draws: r.draws ?? null,
         }))
         .sort(() => Math.random() - 0.5);
 

@@ -1721,6 +1721,21 @@ export const [ChessProvider, useChess] = createContextHook(() => {
       else opUpdate.draws = (opponentProfile?.draws || 0) + 1;
 
       await supabaseNoAuth.from('profiles').update(opUpdate).eq('id', opponentId);
+      profileCacheRef.current.delete(opponentId); // 次回取得で最新のマッチ数を反映
+      // supabasePlayers 内の対戦相手も即時更新（他ユーザーのマッチ数が一覧に反映される）
+      setSupabasePlayers((prev) =>
+        prev.map((p) =>
+          p.id !== opponentId
+            ? p
+            : {
+                ...p,
+                gamesPlayed: (opponentProfile?.games_played || 0) + 1,
+                wins: (opponentProfile?.wins || 0) + (opResult === 'win' ? 1 : 0),
+                losses: (opponentProfile?.losses || 0) + (opResult === 'loss' ? 1 : 0),
+                draws: (opponentProfile?.draws || 0) + (opResult === 'draw' ? 1 : 0),
+              }
+        )
+      );
 
       console.log('Elo updated: Me', myRating, '->', myNewRating, '| Opponent', opponentRating, '->', opponentNewRating);
     } catch (e) {
