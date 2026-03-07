@@ -143,6 +143,7 @@ export async function sendPushNotification(
   body: string,
   data?: Record<string, unknown>
 ): Promise<void> {
+  if (Platform.OS === 'web') return; // Web から exp.host への fetch は CORS でブロックされるためスキップ
   try {
     const message = {
       to: expoPushToken,
@@ -190,6 +191,7 @@ export async function getOpponentPushToken(opponentId: string): Promise<string |
 }
 
 export async function notifyMatchRequest(opponentId: string, senderName: string, senderId?: string): Promise<void> {
+  if (Platform.OS === 'web') return; // Web では exp.host への fetch が CORS でブロックされるためスキップ
   const token = await getOpponentPushToken(opponentId);
   if (token) {
     await sendPushNotification(
@@ -206,6 +208,7 @@ export async function notifyMatchResponse(
   responderName: string,
   accepted: boolean
 ): Promise<void> {
+  if (Platform.OS === 'web') return;
   const token = await getOpponentPushToken(opponentId);
   if (token) {
     const title = accepted ? '対局承諾 / Match Accepted' : '対局辞退 / Match Declined';
@@ -224,6 +227,7 @@ export async function notifyTimelineComment(
   commenterName: string,
   isReply: boolean = false
 ): Promise<void> {
+  if (Platform.OS === 'web') return;
   const token = await getOpponentPushToken(postOwnerId);
   if (token) {
     const title = isReply
@@ -243,6 +247,7 @@ export async function notifyNewMessage(
   senderName: string,
   messagePreview: string
 ): Promise<void> {
+  if (Platform.OS === 'web') return;
   const token = await getOpponentPushToken(recipientId);
   if (token) {
     await sendPushNotification(
