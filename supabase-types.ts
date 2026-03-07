@@ -633,7 +633,7 @@ export type Database = {
       profiles_with_match_stats: {
         Row: {
           id: string
-          name: string | null
+          name: string
           email: string | null
           avatar: string | null
           bio: string | null

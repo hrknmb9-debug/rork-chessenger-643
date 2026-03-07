@@ -371,16 +371,17 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .eq('id', userId)
         .maybeSingle();
 
-      if (data && !error) {
+      if (error) {
+        if (__DEV__) console.warn('ChessProvider: fetchPlayerProfile error', userId, error.code, error.message);
+        return null;
+      }
+      if (data) {
         const player = supabaseProfileToPlayer(data, userLocation?.latitude, userLocation?.longitude);
         profileCacheRef.current.set(userId, player);
         return player;
       }
-      if (error) {
-        console.warn('[ChessProvider] fetchPlayerProfile profiles_with_match_stats failed:', userId, error.message, 'code:', error.code);
-      }
     } catch (e) {
-      console.warn('ChessProvider: fetchPlayerProfile failed for', userId, e);
+      if (__DEV__) console.warn('ChessProvider: fetchPlayerProfile failed for', userId, e);
     }
     return null;
   }, [userLocation]);
@@ -434,12 +435,12 @@ export const [ChessProvider, useChess] = createContextHook(() => {
     const batchSize = 20;
     for (let i = 0; i < allAuthorIds.length; i += batchSize) {
       const batch = allAuthorIds.slice(i, i + batchSize);
-      const { data: profiles, error: profErr } = await supabaseNoAuth
+      const { data: profiles, error: batchErr } = await supabaseNoAuth
         .from('profiles_with_match_stats')
         .select('*')
         .in('id', batch);
-      if (profErr) {
-        console.warn('[ChessProvider] buildTimelinePosts profiles_with_match_stats error:', profErr.message, 'batch:', batch.length);
+      if (batchErr && __DEV__) {
+        console.warn('ChessProvider: buildTimelinePosts profiles_with_match_stats batch error', batchErr.code, batchErr.message);
       }
       if (profiles) {
         profiles.forEach((p: SupabaseProfile) => {
@@ -690,17 +691,10 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         }
         const { data: nearbyProfiles, error: nearbyError } = await profilesQuery;
 
-        if (nearbyError) {
-          console.warn('[ChessProvider] loadSupabaseData profiles_with_match_stats failed:', nearbyError.message, 'code:', nearbyError.code);
+        if (nearbyError && __DEV__) {
+          console.warn('ChessProvider: profiles_with_match_stats load error', nearbyError.code, nearbyError.message);
         }
         if (nearbyProfiles && !nearbyError && nearbyProfiles.length > 0) {
-          if (__DEV__ && nearbyProfiles.length > 0) {
-            const first = nearbyProfiles[0] as Record<string, unknown>;
-            console.log('[ChessProvider] profiles_with_match_stats sample:', {
-              games_played: first.games_played,
-              hasKey: 'games_played' in first,
-            });
-          }
           const userLat = userLocation?.latitude;
           const userLon = userLocation?.longitude;
           const converted = nearbyProfiles.map((p: SupabaseProfile) =>
@@ -1327,7 +1321,11 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         .select('*')
         .neq('id', user.id);
 
-      if (nearbyProfiles && !error) {
+      if (error) {
+        if (__DEV__) console.warn('ChessProvider: refreshPlayers profiles_with_match_stats error', error.code, error.message);
+        return;
+      }
+      if (nearbyProfiles) {
         const userLat = userLocation?.latitude;
         const userLon = userLocation?.longitude;
         const converted = nearbyProfiles.map((p: SupabaseProfile) =>
@@ -1345,7 +1343,7 @@ export const [ChessProvider, useChess] = createContextHook(() => {
         console.log('ChessProvider: Refreshed', converted.length, 'players from Supabase');
       }
     } catch (e) {
-      console.log('ChessProvider: Refresh failed', e);
+      if (__DEV__) console.warn('ChessProvider: refreshPlayers failed', e);
     }
   }, [userLocation]);
 
@@ -1688,12 +1686,15 @@ export const [ChessProvider, useChess] = createContextHook(() => {
 
       const myRating = profile.rating || 1200;
 
-      const { data: opponentProfile } = await supabaseNoAuth
+      const { data: opponentProfile, error: oppErr } = await supabaseNoAuth
         .from('profiles_with_match_stats')
         .select('rating, games_played, wins, losses, draws')
         .eq('id', opponentId)
         .maybeSingle();
 
+      if (oppErr && __DEV__) {
+        console.warn('ChessProvider: updateRatingAfterResult opponent fetch error', oppErr.code, oppErr.message);
+      }
       const opponentRating = opponentProfile?.rating || 1200;
       const isDraw = myResult === 'draw';
 

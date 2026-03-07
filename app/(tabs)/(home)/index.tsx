@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeImage } from '@/components/SafeImage';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   Search,
   Map,
@@ -251,26 +251,22 @@ export default function HomeScreen() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchPlayers = useCallback(async () => {
+    setFetchError(null);
     let query = supabase.from('profiles_with_match_stats').select('*');
     if (currentUserId) {
       query = query.neq('id', currentUserId);
     }
     const { data, error } = await query;
     if (error) {
-      console.warn('[Home] profiles_with_match_stats error:', error.message, 'code:', error.code, 'details:', error.details);
+      const msg = `profiles_with_match_stats: ${error.code ?? 'unknown'} ${error.message}`;
+      if (__DEV__) console.warn('fetchPlayers error:', msg);
+      setFetchError(msg);
       return;
     }
     if (data) {
-      if (__DEV__ && data.length > 0) {
-        const first = data[0] as Record<string, unknown>;
-        console.log('[Home] profiles_with_match_stats sample:', {
-          games_played: first.games_played,
-          hasKey: 'games_played' in first,
-          keys: Object.keys(first).filter(k => k.includes('game') || k.includes('win') || k.includes('loss') || k.includes('draw')),
-        });
-      }
       const userLat = userLocation?.latitude;
       const userLon = userLocation?.longitude;
       const mapped = (data as SupabaseProfile[]).map(p => mapProfile(p, userLat, userLon));
@@ -282,6 +278,12 @@ export default function HomeScreen() {
     setLoading(true);
     fetchPlayers().finally(() => setLoading(false));
   }, [fetchPlayers]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchPlayers();
+    }, [fetchPlayers])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -327,6 +329,17 @@ export default function HomeScreen() {
     );
   }
 
+  if (fetchError) {
+    return (
+      <View style={[styles.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <Text style={{ color: colors.textMuted, textAlign: 'center', marginBottom: 16 }}>{fetchError}</Text>
+        <Pressable onPress={() => { setLoading(true); fetchPlayers().finally(() => setLoading(false)); }} style={{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: colors.accent, borderRadius: 8 }}>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>{language === 'ja' ? '再試行' : 'Retry'}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.safeHeader}>
@@ -354,6 +367,14 @@ export default function HomeScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.listHeader}>
+            {fetchError ? (
+              <View style={[styles.errorBanner, { backgroundColor: colors.red + '20', borderColor: colors.red }]}>
+                <Text style={[styles.errorText, { color: colors.red }]} numberOfLines={2}>{fetchError}</Text>
+                <Pressable onPress={() => fetchPlayers()} style={[styles.retryBtn, { backgroundColor: colors.accent }]}>
+                  <Text style={styles.retryBtnText}>{language === 'ja' ? '再試行' : 'Retry'}</Text>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.locationBar}>
               <Pressable
                 onPress={toggleLocationEnabled}
@@ -463,5 +484,9 @@ function createStyles(colors: ThemeColors) {
     nearbyChipActive: { backgroundColor: colors.blueMuted, borderColor: colors.blue + '66' },
     nearbyChipText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
     nearbyChipTextActive: { color: colors.blue, fontWeight: '700' },
+    errorBanner: { marginHorizontal: 16, marginBottom: 12, padding: 14, borderRadius: 12, borderWidth: 1 },
+    errorText: { fontSize: 13, marginBottom: 10 },
+    retryBtn: { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 },
+    retryBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   });
 }
